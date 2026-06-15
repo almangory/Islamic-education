@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;800;900&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Cairo", system-ui, -apple-system, sans-serif;
+  --font-serif: "Amiri", Georgia, serif;
+  
+  --color-natural-bg: #F7F3E9;
+  --color-natural-text: #4A453E;
+  --color-natural-green: #5A6B47;
+  --color-natural-darkgreen: #3A452E;
+  --color-natural-border: #DCD3C1;
+  --color-natural-header: #F1EBDC;
+  --color-natural-cream: #E9E1CD;
+  --color-natural-creambg: #FAF9F6;
+  --color-natural-hover: #E2D9C2;
+  --color-natural-orange: #D48166;
+  --color-natural-gold: #8E8268;
+}
+
+@utility book-shadow {
+  box-shadow: 20px 0 50px -10px rgba(0,0,0,0.1), -20px 0 50px -10px rgba(0,0,0,0.1);
+}
+
+@utility page-fold {
+  background: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.05) 48%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.05) 52%, transparent 100%);
+}
+
+@utility ornament {
+  background-image: radial-gradient(#8E8268 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
+  opacity: 0.08;
+}
+
+
