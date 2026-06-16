@@ -12,10 +12,61 @@ import {
   HelpCircle as HelpIcon,
   Volume2,
   BookOpenCheck,
-  Compass
+  Compass,
+  Pencil,
+  Trash2,
+  Copy,
+  Check
 } from 'lucide-react';
 import { Lesson, StorySlide, VocabularyWord } from '../types';
 import SoundEngine from '../lib/audio';
+import imageOverridesStatic from '../data/image_overrides.json';
+
+// Helper function to extract Google Drive file ID and convert to direct image link
+const getGoogleDriveDirectImageUrl = (url: string | undefined): string | undefined => {
+  if (!url) return undefined;
+  
+  // Custom check for Google Drive shares
+  if (url.includes('drive.google.com')) {
+    const matches = url.match(/\/file\/d\/([a-zA-Z0-9-_]+)/) || url.match(/[?&]id=([a-zA-Z0-9-_]+)/);
+    if (matches && matches[1]) {
+      return `https://docs.google.com/uc?export=view&id=${matches[1]}`;
+    }
+  }
+  return url;
+};
+
+interface ImageWithFallbackProps { 
+  src: string; 
+  alt: string; 
+  fallbackType: string | undefined;
+  renderFallback: (type: string | undefined) => React.ReactNode;
+}
+
+const ImageWithFallback = ({ src, alt, fallbackType, renderFallback }: ImageWithFallbackProps) => {
+  const [error, setError] = useState(false);
+
+  // Reset error state when src changes
+  useEffect(() => {
+    setError(false);
+  }, [src]);
+
+  if (error) {
+    return <>{renderFallback(fallbackType)}</>;
+  }
+
+  return (
+    <div className="relative w-full h-full min-h-[220px] bg-[#FAF9F6] flex items-center justify-center rounded-2xl overflow-hidden border border-[#DCD3C1]">
+      <img
+        src={src}
+        alt={alt}
+        className="w-full h-full object-cover max-h-[300px]"
+        referrerPolicy="no-referrer"
+        onError={() => setError(true)}
+      />
+    </div>
+  );
+};
 
 interface IllustratedStoryProps {
   lesson: Lesson;
@@ -38,13 +89,146 @@ export default function IllustratedStory({
   const [pointsReward, setPointsReward] = useState<number>(0);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
 
+  const [customImages, setCustomImages] = useState<Record<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem('gdrive_image_overrides');
+      const localMap = stored ? JSON.parse(stored) : {};
+      return { ...(imageOverridesStatic || {}), ...localMap };
+    } catch (e) {
+      return (imageOverridesStatic || {}) as Record<string, string>;
+    }
+  });
+  const [showEditImageModal, setShowEditImageModal] = useState<boolean>(false);
+  const [isPasscodeVerified, setIsPasscodeVerified] = useState<boolean>(false);
+  const [tempImageUrl, setTempImageUrl] = useState<string>('');
+  const [copied, setCopied] = useState<boolean>(false);
+  
+  // Full-stack dynamic override states
+  const [passcode, setPasscode] = useState<string>('');
+  const [errorMsg, setErrorMsg] = useState<string>('');
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+
   const currentSlide = lesson.slides[currentPage];
+  const slideOverrideKey = `${lesson.id}_slide_${currentSlide?.id}`;
+  const displayImageUrl = customImages[slideOverrideKey] !== undefined ? customImages[slideOverrideKey] : currentSlide?.imageUrl;
   const isLastPage = currentPage === lesson.slides.length - 1;
+
+  // Sync with fullstack server overrides on mount
+  useEffect(() => {
+    fetch('/api/image-overrides')
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data === 'object') {
+          setCustomImages(prev => ({ ...prev, ...data }));
+        }
+      })
+      .catch(() => {
+        console.log('Running in static preview mode, using local files.');
+      });
+  }, []);
 
   useEffect(() => {
     // Play transition sound on page turn
     SoundEngine.playSparkle();
   }, [currentPage]);
+
+  const handleLocalVerify = () => {
+    if (passcode.trim() === '20302060') {
+      setIsPasscodeVerified(true);
+      setErrorMsg('');
+    } else {
+      setErrorMsg('رمز المرور الذي أدخلته غير صحيح! يرجى المحاولة مرة أخرى.');
+    }
+  };
+
+  const handleSaveOverrideAndSync = () => {
+    if (!passcode.trim()) {
+      setErrorMsg('فضلاً، يرجى كتابة رمز مرور الصلاحية لإتمام عملية الحفظ البرمجية.');
+      return;
+    }
+
+    setErrorMsg('');
+    setIsSaving(true);
+
+    fetch('/api/update-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: slideOverrideKey,
+        imageUrl: tempImageUrl.trim(),
+        passcode: passcode.trim()
+      })
+    })
+    .then(async (res) => {
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'فشل الاتصال بالخادم لحفظ الملف البرمجي.');
+      }
+      return data;
+    })
+    .then(() => {
+      // Success! Update customImages map with the changes
+      const updated = { ...customImages };
+      if (tempImageUrl.trim()) {
+        updated[slideOverrideKey] = tempImageUrl.trim();
+      } else {
+        delete updated[slideOverrideKey];
+      }
+      setCustomImages(updated);
+      localStorage.setItem('gdrive_image_overrides', JSON.stringify(updated));
+      setShowEditImageModal(false);
+      setPasscode('');
+      setErrorMsg('');
+    })
+    .catch((err) => {
+      setErrorMsg(err.message);
+    })
+    .finally(() => {
+      setIsSaving(false);
+    });
+  };
+
+  const handleResetOverrideAndSync = () => {
+    if (!passcode.trim()) {
+      setErrorMsg('فضلاً، يرجى كتابة رمز مرور الصلاحية لإتمام عملية إعادة التعيين البرمجية.');
+      return;
+    }
+
+    setErrorMsg('');
+    setIsSaving(true);
+
+    fetch('/api/update-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: slideOverrideKey,
+        passcode: passcode.trim(),
+        action: 'delete'
+      })
+    })
+    .then(async (res) => {
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'فشل الاتصال بالخادم لإعادة التعيين.');
+      }
+      return data;
+    })
+    .then(() => {
+      const updated = { ...customImages };
+      delete updated[slideOverrideKey];
+      setCustomImages(updated);
+      localStorage.setItem('gdrive_image_overrides', JSON.stringify(updated));
+      setShowEditImageModal(false);
+      setPasscode('');
+      setErrorMsg('');
+    })
+    .catch((err) => {
+      setErrorMsg(err.message);
+    })
+    .finally(() => {
+      setIsSaving(false);
+    });
+  };
 
   const handleNext = () => {
     if (currentPage < lesson.slides.length - 1) {
@@ -69,7 +253,31 @@ export default function IllustratedStory({
     }
   };
 
-  const renderIllustration = (type: string | undefined) => {
+  const renderIllustration = (imageUrl: string | undefined, type: string | undefined) => {
+    const isUrl = imageUrl && (
+      imageUrl.startsWith('http://') || 
+      imageUrl.startsWith('https://') || 
+      imageUrl.startsWith('/') ||
+      imageUrl.includes('.') ||
+      imageUrl.includes('drive.google.com')
+    );
+
+    if (isUrl) {
+      const directUrl = getGoogleDriveDirectImageUrl(imageUrl);
+      return (
+        <ImageWithFallback 
+          src={directUrl || ''} 
+          alt="لوحة تعبيرية للدرس" 
+          fallbackType={type}
+          renderFallback={(t) => renderFallbackIllustration(t)}
+        />
+      );
+    }
+
+    return renderFallbackIllustration(type);
+  };
+
+  const renderFallbackIllustration = (type: string | undefined) => {
     switch (type) {
       case 'space':
         return (
@@ -392,9 +600,26 @@ export default function IllustratedStory({
         {/* LEFT PAGE: Illustrated Board (45% width) */}
         <div className="w-full md:w-[45%] flex flex-col justify-between p-2 md:pl-8 pb-6 md:pb-0 text-right md:border-l md:border-[#DCD3C1]/40" id="story-illustrated-board">
           <div>
-            <h4 className="text-[10px] font-extrabold text-[#8E8268] mb-3 uppercase tracking-wider">اللوحة المصورة</h4>
+            <div className="flex justify-between items-center mb-3">
+              <h4 className="text-[10px] font-extrabold text-[#8E8268] uppercase tracking-wider">اللوحة المصورة</h4>
+              <button
+                onClick={() => {
+                  setTempImageUrl(displayImageUrl || '');
+                  setCopied(false);
+                  setPasscode('');
+                  setErrorMsg('');
+                  setIsPasscodeVerified(false);
+                  setShowEditImageModal(true);
+                }}
+                className="text-[10px] font-bold text-[#5A6B47] hover:text-[#465337] flex items-center gap-1 bg-[#E9E1CD]/45 hover:bg-[#E9E1CD]/85 px-2.5 py-1.5 rounded-lg transition border border-[#DCD3C1] shadow-sm cursor-pointer"
+                title="تعديل رابط الصورة وتضمينها في السورس"
+              >
+                <Pencil className="w-3 h-3 text-[#5A6B47]" />
+                <span>تعديل اللوحة المصورة 📝</span>
+              </button>
+            </div>
             <div className="relative rounded-2xl overflow-hidden border border-[#DCD3C1] bg-[#F7F3E9]">
-              {renderIllustration(currentSlide.illustrationType)}
+              {renderIllustration(displayImageUrl, currentSlide.illustrationType)}
             </div>
           </div>
 
@@ -604,6 +829,185 @@ export default function IllustratedStory({
                   العودة للمكتبة الشاملة
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Image Modal */}
+      <AnimatePresence>
+        {showEditImageModal && (
+          <div className="fixed inset-0 bg-[#3A452E]/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-[#FAF9F6] border-2 border-[#5A6B47] rounded-[2rem] p-6 max-w-lg w-full shadow-2xl text-right relative overflow-hidden"
+            >
+              {/* Star glowing decor */}
+              <div className="absolute top-0 right-0 w-24 h-24 bg-[#E9E1CD]/50 rounded-full blur-xl pointer-events-none"></div>
+
+              {!isPasscodeVerified ? (
+                /* SCREEN 1: Passcode Verification Required */
+                <>
+                  <div className="flex items-center gap-2.5 text-[#3A452E] mb-4 border-b border-[#DCD3C1] pb-3">
+                    <Pencil className="w-5 h-5 text-[#5A6B47]" />
+                    <h3 className="font-bold text-base font-sans font-black">رمز التحقق الأمني 🔒</h3>
+                  </div>
+
+                  <p className="text-xs text-[#8E8268] mb-4 leading-relaxed font-semibold">
+                    التحكم وتعديل الألواح المصورة يتطلب صلاحيات الإشراف والمعلمين. فضلاً، أدخل رمز المرور للمتابعة:
+                  </p>
+
+                  {/* Error block */}
+                  {errorMsg && (
+                    <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-bold text-right">
+                      ⚠️ {errorMsg}
+                    </div>
+                  )}
+
+                  {/* Input for passcode */}
+                  <div className="mb-5">
+                    <label className="block text-xs font-extrabold text-[#3A452E] mb-1.5 text-right">رمز مرور الصلاحية:</label>
+                    <input
+                      type="password"
+                      value={passcode}
+                      onChange={(e) => setPasscode(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleLocalVerify();
+                        }
+                      }}
+                      placeholder="أدخل رمز المرور الأمني للمتابعة"
+                      className="w-full bg-[#F7F3E9] border border-[#DCD3C1] rounded-xl px-3 py-2 text-xs text-[#4A453E] focus:outline-none focus:border-[#5A6B47] text-center font-mono tracking-wider"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={handleLocalVerify}
+                      className="bg-[#5A6B47] hover:bg-[#465337] text-white font-bold text-xs py-2 px-5 rounded-xl transition cursor-pointer shadow-sm"
+                    >
+                      تحقق ودخول 🔑
+                    </button>
+                    <button
+                      onClick={() => setShowEditImageModal(false)}
+                      className="bg-[#FAF9F6] border border-[#DCD3C1] hover:bg-[#E9E1CD] text-[#4A453E] font-bold text-xs py-2 px-4 rounded-xl transition cursor-pointer"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                </>
+              ) : (
+                /* SCREEN 2: Editing Board with Drive Image Url input */
+                <>
+                  <div className="flex items-center gap-2.5 text-[#3A452E] mb-4 border-b border-[#DCD3C1] pb-3">
+                    <Pencil className="w-5 h-5 text-[#5A6B47]" />
+                    <h3 className="font-bold text-base font-sans font-black">تعديل رابط الصورة وتضمينها برمجياً 🖼️</h3>
+                  </div>
+
+                  <p className="text-xs text-[#8E8268] mb-4 leading-relaxed font-semibold">
+                    بإمكانك استبدال اللوحة الحالية برابط صورة مباشر من قوقل درايف أو الويب. سيتم حفظ هذا التعديل مباشرةً على خادم الموقع وتضمينه في الأكواد البرمجية ليبقى دائماً!
+                  </p>
+
+                  {/* Error block */}
+                  {errorMsg && (
+                    <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-bold text-right" id="override-error-banner">
+                      ⚠️ {errorMsg}
+                    </div>
+                  )}
+
+                  {/* Input for image URL */}
+                  <div className="mb-4">
+                    <label className="block text-xs font-extrabold text-[#3A452E] mb-1.5 text-right">رابط الصورة (رابط Google Drive أو أي رابط ويب مباشر):</label>
+                    <input
+                      type="text"
+                      value={tempImageUrl}
+                      onChange={(e) => setTempImageUrl(e.target.value)}
+                      placeholder="https://drive.google.com/file/d/..."
+                      className="w-full bg-[#F7F3E9] border border-[#DCD3C1] rounded-xl px-3 py-2 text-xs text-[#4A453E] focus:outline-none focus:border-[#5A6B47] text-left"
+                      dir="ltr"
+                      disabled={isSaving}
+                    />
+                  </div>
+
+                  {/* Google Drive Guide */}
+                  <div className="mb-4 p-3 bg-[#E9E1CD]/30 border border-[#DCD3C1] rounded-xl text-xs text-[#4A453E] leading-relaxed text-right">
+                    <span className="font-bold text-[#3A452E] block mb-1">💡 إرشادات روابط قوقل درايف (Google Drive):</span>
+                    <ul className="list-inside space-y-1 text-[11px] font-medium pr-1">
+                      <li>• تأكد من جعل صلاحية مشاركة الملف في Drive <span className="font-bold text-[#5A6B47]">" Anyone with the link can view "</span> (عام للجميع).</li>
+                      <li>• انسخ الرابط كاملاً مثل: <span className="font-mono bg-[#FAF9F6] border border-[#DCD3C1]/50 px-1 py-0.5 rounded text-[10px]" dir="ltr">https://drive.google.com/file/d/ID/view...</span></li>
+                      <li>• يقوم التطبيق تلقائياً بتحويل رابط المشاركة ليعرض ويعمل بالشاشات والمنصات مباشرة!</li>
+                    </ul>
+                  </div>
+
+                  {/* Export code block */}
+                  <div className="mb-5 text-right">
+                    <span className="block text-xs font-bold text-[#3A452E] mb-2">📋 كود التضمين للمطور (وضعه في سورس الموقع):</span>
+                    <div className="p-3.5 bg-[#F1EBDC]/60 hover:bg-[#F1EBDC]/95 rounded-xl border border-[#DCD3C1] text-left font-mono text-[11px] overflow-x-auto relative transition duration-200">
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(`imageUrl: "${tempImageUrl || 'رابط_درايف'}",`);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        }}
+                        className="absolute top-2 right-2 p-1.5 bg-[#FAF9F6] hover:bg-[#E9E1CD] text-[#5A6B47] transition border border-[#DCD3C1] rounded-md cursor-pointer flex items-center justify-center gap-1 select-none"
+                        title="نسخ السطر لملف الكريكلوم"
+                      >
+                        {copied ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-[10px] text-emerald-600 font-sans font-bold">تم النسخ!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span className="text-[10px] text-gray-500 font-sans font-bold">نسخ دائم 📌</span>
+                          </>
+                        )}
+                      </button>
+                      <span className="text-[10px] text-[#8E8268] block mb-2 font-sans text-right">
+                        // لتضمينها بشكل دائم، افتح الملف <code className="text-[#3A452E] bg-[#E9E1CD] px-1 py-0.5 rounded text-[9px]">src/data/curriculum.ts</code> وابحث عن الدرس ذو الرمز <code className="text-[#3A452E] bg-[#E9E1CD] px-1 py-0.5 rounded text-[9px] font-mono">"{lesson.id}"</code>، وضمن السلايد رقم <code className="text-[#3A452E] bg-[#E9E1CD] px-1 py-0.5 rounded text-[9px] font-mono">{currentSlide?.id}</code> استبدل السطر التالي:
+                      </span>
+                      <code className="text-[#3a442e] font-bold block" dir="ltr">
+                        imageUrl: "{tempImageUrl || 'https://drive.google.com/...'}",
+                      </code>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex flex-col sm:flex-row justify-between gap-2.5">
+                    <button
+                      onClick={handleResetOverrideAndSync}
+                      disabled={isSaving}
+                      className="bg-[#FAF9F6] border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-xs py-2 px-4 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 sm:order-last disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>{isSaving ? "جاري التعديل..." : "إعادة تعيين للأصلي ↩️"}</span>
+                    </button>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSaveOverrideAndSync}
+                        disabled={isSaving}
+                        className="bg-[#5A6B47] hover:bg-[#465337] text-white font-bold text-xs py-2 px-5 rounded-xl transition cursor-pointer shadow-sm disabled:opacity-50 flex items-center gap-1"
+                      >
+                        <span>{isSaving ? "جاري الحفظ البرمجي..." : "حفظ وتضمين دائم 💾"}</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!isSaving) setShowEditImageModal(false);
+                        }}
+                        disabled={isSaving}
+                        className="bg-[#FAF9F6] border border-[#DCD3C1] hover:bg-[#E9E1CD] text-[#4A453E] font-bold text-xs py-2 px-4 rounded-xl transition cursor-pointer disabled:opacity-50"
+                      >
+                        إلغاء
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </motion.div>
           </div>
         )}
