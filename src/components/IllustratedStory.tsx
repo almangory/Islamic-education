@@ -30,7 +30,8 @@ const getGoogleDriveDirectImageUrl = (url: string | undefined): string | undefin
   if (url.includes('drive.google.com')) {
     const matches = url.match(/\/file\/d\/([a-zA-Z0-9-_]+)/) || url.match(/[?&]id=([a-zA-Z0-9-_]+)/);
     if (matches && matches[1]) {
-      return `https://docs.google.com/uc?export=view&id=${matches[1]}`;
+      // Use lh3.googleusercontent.com which bypasses the Google Drive 403 authorization and third-party cookies restrictions.
+      return `https://lh3.googleusercontent.com/d/${matches[1]}`;
     }
   }
   return url;
