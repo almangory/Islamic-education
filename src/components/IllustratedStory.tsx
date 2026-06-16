@@ -16,11 +16,14 @@ import {
   Pencil,
   Trash2,
   Copy,
-  Check
+  Check,
+  Play,
+  Pause
 } from 'lucide-react';
 import { Lesson, StorySlide, VocabularyWord } from '../types';
 import SoundEngine from '../lib/audio';
 import imageOverridesStatic from '../data/image_overrides.json';
+import { quranSurahsData, QuranSurah, QuranVerse } from '../data/quranData';
 
 // Helper function to extract Google Drive file ID and convert to direct image link
 const getGoogleDriveDirectImageUrl = (url: string | undefined): string | undefined => {
@@ -108,6 +111,47 @@ export default function IllustratedStory({
   const [passcode, setPasscode] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  // Quran Integration States
+  const [activeTab, setActiveTab] = useState<'lesson' | 'quran'>('lesson');
+  const [selectedQuranAyah, setSelectedQuranAyah] = useState<number | null>(1);
+  const [isSurahPlaying, setIsSurahPlaying] = useState<boolean>(false);
+  const [audioInstance, setAudioInstance] = useState<HTMLAudioElement | null>(null);
+
+  const matchedSurah = quranSurahsData[lesson.id];
+
+  // Safely manage Quran audio playing
+  useEffect(() => {
+    if (isSurahPlaying && matchedSurah?.audioUrl) {
+      const audio = new Audio(matchedSurah.audioUrl);
+      audio.play().catch(e => {
+        console.error("Error playing recitation stream: ", e);
+        setIsSurahPlaying(false);
+      });
+      audio.onended = () => setIsSurahPlaying(false);
+      setAudioInstance(audio);
+      return () => {
+        audio.pause();
+        audio.src = '';
+      };
+    } else {
+      if (audioInstance) {
+        audioInstance.pause();
+        audioInstance.src = '';
+        setAudioInstance(null);
+      }
+    }
+  }, [isSurahPlaying]);
+
+  // Clean up audio on unmount or tab change
+  useEffect(() => {
+    return () => {
+      if (audioInstance) {
+        audioInstance.pause();
+        audioInstance.src = '';
+      }
+    };
+  }, [audioInstance, activeTab, lesson.id]);
 
   const currentSlide = lesson.slides[currentPage];
   const slideOverrideKey = `${lesson.id}_slide_${currentSlide?.id}`;
@@ -592,14 +636,197 @@ export default function IllustratedStory({
         </div>
       </div>
 
+      {/* Quran Tab Selector (only visible if the lesson has a matching Surah in quranSurahsData) */}
+      {matchedSurah && (
+        <div className="flex gap-2.5 mb-5 justify-start" id="quran-tab-switcher">
+          <button
+            onClick={() => {
+              setActiveTab('lesson');
+              SoundEngine.playSparkle();
+            }}
+            className={`py-3 px-6 rounded-2xl text-xs font-black transition-all duration-300 flex items-center gap-2 cursor-pointer shadow-sm ${
+              activeTab === 'lesson'
+                ? 'bg-[#5A6B47] text-white border-b-4 border-[#3D4B2D]'
+                : 'bg-white border-2 border-[#DCD3C1] text-[#8E8268] hover:border-[#8E8268]'
+            }`}
+          >
+            <BookOpenCheck className="w-4 h-4" />
+            <span>عرض الدرس التفاعلي والوسائط 📖</span>
+          </button>
+          
+          <button
+            onClick={() => {
+              setActiveTab('quran');
+              SoundEngine.playTrophy();
+            }}
+            className={`py-3 px-6 rounded-2xl text-xs font-black transition-all duration-300 flex items-center gap-2 cursor-pointer shadow-sm ${
+              activeTab === 'quran'
+                ? 'bg-[#B08933] text-white border-b-4 border-[#866520] shadow-md animate-pulse'
+                : 'bg-white border-2 border-[#DCD3C1] text-[#8E8268] hover:border-[#8E8268]'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-yellow-300 fill-yellow-300" />
+            <span>تلاوة السورة الكريمة من المصحف الشريف 🕌</span>
+          </button>
+        </div>
+      )}
+
       {/* Physical Open-Book Spread container (Natural Tones Paper style) */}
       <div className="bg-[#FAF9F6] border border-[#DCD3C1] rounded-[2rem] p-5 md:p-8 flex flex-col md:flex-row gap-0 book-shadow relative overflow-hidden min-h-[480px]">
-        
-        {/* Book spine middle fold decorator (visible only on desktop) */}
-        <div className="absolute inset-y-0 left-1/2 w-10 -translate-x-1/2 page-fold pointer-events-none hidden md:block z-20"></div>
+        {activeTab === 'quran' && matchedSurah ? (
+          <>
+            {/* LEFT PAGE of Quran Spread (40% width): Tafsir, Audio controls, info */}
+            <div className="w-full md:w-[40%] flex flex-col justify-between p-2 md:pl-8 pb-6 md:pb-0 text-right md:border-l md:border-[#DCD3C1]/40" id="quran-left-info-page">
+              <div className="space-y-4">
+                {/* Surah Mini Info Badge */}
+                <div className="bg-[#FAF9F6] border border-[#B08933]/30 p-4 rounded-2xl relative overflow-hidden shadow-inner">
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-[#B08933] to-emerald-500"></div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-[10px] font-black text-[#5A6B47] bg-[#5A6B47]/10 px-2.5 py-1 rounded-lg">
+                      {matchedSurah.type}
+                    </span>
+                    <h3 className="text-base font-black text-[#3A452E]">{matchedSurah.name}</h3>
+                  </div>
+                  <p className="text-[11px] text-[#5A6B47] font-semibold leading-relaxed">
+                    {matchedSurah.intro}
+                  </p>
+                </div>
 
-        {/* LEFT PAGE: Illustrated Board (45% width) */}
-        <div className="w-full md:w-[45%] flex flex-col justify-between p-2 md:pl-8 pb-6 md:pb-0 text-right md:border-l md:border-[#DCD3C1]/40" id="story-illustrated-board">
+                {/* Audio Recitation Player */}
+                <div className="bg-amber-50/50 border border-[#DCD3C1] p-4 rounded-2xl flex flex-col items-center gap-3">
+                  <div className="flex items-center gap-3 w-full justify-between">
+                    <div className="text-right">
+                      <p className="text-[10px] text-[#8E8268] font-bold">الاستماع للقرآن الكريم</p>
+                      <p className="text-xs font-black text-[#4A453E]">تلاوة مباركة بصوت ندي عذب 🎙️</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setIsSurahPlaying(!isSurahPlaying);
+                        SoundEngine.playTrophy();
+                      }}
+                      className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${
+                        isSurahPlaying 
+                          ? 'bg-[#B08933] text-white shadow-md shadow-[#B08933]/20' 
+                          : 'bg-[#5A6B47] hover:bg-[#465337] text-white'
+                      } cursor-pointer`}
+                    >
+                      {isSurahPlaying ? (
+                        <Pause className="w-5 h-5" />
+                      ) : (
+                        <Play className="w-5 h-5 mr-0.5" />
+                      )}
+                    </button>
+                  </div>
+                  
+                  {isSurahPlaying && (
+                    <div className="flex items-center gap-1 mt-1 justify-center w-full">
+                      <span className="h-4 w-1 bg-[#B08933] rounded animate-bounce"></span>
+                      <span className="h-6 w-1 bg-[#5A6B47] rounded animate-bounce [animation-delay:0.1s]"></span>
+                      <span className="h-5 w-1 bg-[#B08933] rounded animate-bounce [animation-delay:0.2s]"></span>
+                      <span className="h-7 w-1 bg-[#5A6B47] rounded animate-bounce [animation-delay:0.3s]"></span>
+                      <span className="h-4 w-1 bg-[#B08933] rounded animate-bounce [animation-delay:0.4s]"></span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Selected Ayah Explanation Box */}
+                {selectedQuranAyah !== null && (
+                  <motion.div
+                    key={selectedQuranAyah}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 bg-amber-50/20 border-2 border-dashed border-[#B08933]/50 rounded-2xl relative"
+                  >
+                    <span className="absolute -top-3 right-4 bg-[#B08933] text-white text-[9px] font-black px-2 py-0.5 rounded-full">
+                      التفسير الميسَّر للآية {selectedQuranAyah}
+                    </span>
+                    
+                    <p className="text-xs font-bold text-[#B08933] leading-relaxed mb-2 mt-1">
+                      " {matchedSurah.highlightedVerses.find(v => v.number === selectedQuranAyah)?.text} "
+                    </p>
+                    <p className="text-[11px] text-[#4A453E] leading-relaxed font-semibold">
+                      {matchedSurah.highlightedVerses.find(v => v.number === selectedQuranAyah)?.tafsir}
+                    </p>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Back advice / guidance */}
+              <div className="bg-[#FAF9F6] border border-[#DCD3C1] p-3 rounded-xl mt-4">
+                <p className="text-[10px] text-[#8E8268] font-bold text-center leading-relaxed">
+                  💡 انقر على أي آية مباركة في الصفحة المقابلة وسيظهر لك التفسير الميسر فوراً ومكانها في السورة!
+                </p>
+              </div>
+            </div>
+
+            {/* RIGHT PAGE of Quran Spread (60% width): Beautifully structured scrolls of Verses */}
+            <div className="w-full md:w-[60%] flex flex-col justify-between p-2 md:pr-10 pt-6 md:pt-0 text-right border-t md:border-t-0 border-[#DCD3C1]/50" id="quran-right-scroll-page">
+              <div>
+                <div className="flex justify-between items-center mb-5">
+                  <h3 className="text-sm font-black text-[#B08933] flex items-center gap-1.5">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#B08933]"></span>
+                    <span>المصحف الشريف المبارك</span>
+                  </h3>
+                  <span className="text-[10px] font-extrabold text-[#8E8268]" dir="rtl">
+                    طريقة العرض: مصحف المدينة المنورة 📖
+                  </span>
+                </div>
+
+                <div className="bg-[#F7F3E9] border border-[#E9E1CD] rounded-2xl p-6 md:p-8 relative min-h-[300px] overflow-y-auto max-h-[400px]">
+                  {/* Watermark/Symbol of Quran */}
+                  <div className="absolute inset-0 opacity-5 flex items-center justify-center pointer-events-none">
+                    <span className="text-9xl">📖</span>
+                  </div>
+
+                  <div className="space-y-4" dir="rtl">
+                    {/* Bismillah block */}
+                    <div className="text-center mb-6">
+                      <span className="text-md md:text-lg font-black font-serif text-[#3A452E] border-b border-[#D48166]/35 pb-2 inline-block">
+                        بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+                      </span>
+                    </div>
+
+                    {/* Flowing text representation */}
+                    <p className="text-right leading-[2.5rem] md:leading-[3rem] text-[#333333] select-none text-md md:text-xl font-medium">
+                      {matchedSurah.highlightedVerses.map((verse) => (
+                        <span
+                          key={verse.number}
+                          onClick={() => {
+                            setSelectedQuranAyah(verse.number);
+                            SoundEngine.playSparkle();
+                          }}
+                          className={`cursor-pointer inline-block mx-1.5 px-2 py-1 rounded-xl transition ${
+                            selectedQuranAyah === verse.number
+                              ? 'bg-amber-100 border border-[#B08933] font-black text-[#B08933] scale-105'
+                              : 'hover:bg-[#E9E1CD]/50 hover:text-emerald-800'
+                          }`}
+                        >
+                          {verse.text} 
+                          <span className="inline-flex items-center justify-center w-6 h-6 mr-1.5 text-[9px] text-[#B08933] border border-[#B08933]/50 rounded-full font-bold bg-[#FAF9F6]">
+                            {verse.number}
+                          </span>
+                        </span>
+                      ))}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress and status decoration */}
+              <div className="mt-6 border-t border-[#DCD3C1] pt-4 flex justify-between items-center text-[10px] font-bold text-[#8E8268]">
+                <span>عدد الآيات المعروضة: {matchedSurah.highlightedVerses.length} آيات كريمة</span>
+                <span className="text-[#B08933]">« اقرأ وارتقِ ورتّل كما كنت ترتل في الدنيا »</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Book spine middle fold decorator (visible only on desktop) */}
+            <div className="absolute inset-y-0 left-1/2 w-10 -translate-x-1/2 page-fold pointer-events-none hidden md:block z-20"></div>
+
+            {/* LEFT PAGE: Illustrated Board (45% width) */}
+            <div className="w-full md:w-[45%] flex flex-col justify-between p-2 md:pl-8 pb-6 md:pb-0 text-right md:border-l md:border-[#DCD3C1]/40" id="story-illustrated-board">
+
           <div>
             <div className="flex justify-between items-center mb-3">
               <h4 className="text-[10px] font-extrabold text-[#8E8268] uppercase tracking-wider">اللوحة المصورة</h4>
@@ -717,7 +944,10 @@ export default function IllustratedStory({
             </button>
           </div>
         </div>
+          </>
+        )}
       </div>
+
 
       {/* Vocabulary Detail Modal/Drawer (Sand backdrop) */}
       <AnimatePresence>
