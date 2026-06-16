@@ -118,11 +118,143 @@ export default function IllustratedStory({
   const [isSurahPlaying, setIsSurahPlaying] = useState<boolean>(false);
   const [audioInstance, setAudioInstance] = useState<HTMLAudioElement | null>(null);
 
+  // Single verse audio recitation states
+  const [playingVerseNumber, setPlayingVerseNumber] = useState<number | null>(null);
+  const [verseAudioInstance, setVerseAudioInstance] = useState<HTMLAudioElement | null>(null);
+  const [isVerseLoading, setIsVerseLoading] = useState<boolean>(false);
+
   const matchedSurah = quranSurahsData[lesson.id];
+
+  // Dynamic Full Quran Surah State
+  const [fullVerses, setFullVerses] = useState<{ number: number; text: string; tafsir: string }[]>([]);
+  const [isLoadingFullSurah, setIsLoadingFullSurah] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Sync / Reset when lesson.id changes
+  useEffect(() => {
+    setFullVerses([]);
+    setIsLoadingFullSurah(false);
+    setLoadError(null);
+    setSelectedQuranAyah(1);
+    setIsSurahPlaying(false);
+    if (audioInstance) {
+      audioInstance.pause();
+      setAudioInstance(null);
+    }
+    if (verseAudioInstance) {
+      verseAudioInstance.pause();
+      setVerseAudioInstance(null);
+    }
+    setPlayingVerseNumber(null);
+  }, [lesson.id]);
+
+  // Load complete Surah from Quran.cloud API when showing Quran tab
+  useEffect(() => {
+    if (activeTab === 'quran' && matchedSurah && fullVerses.length === 0) {
+      const fetchFullSurah = async () => {
+        setIsLoadingFullSurah(true);
+        setLoadError(null);
+        try {
+          const surahNum = parseInt(matchedSurah.surahNumber);
+          const res = await fetch(`https://api.alquran.cloud/v1/surah/${surahNum}/editions/quran-uthmani,ar.muyassar`);
+          if (!res.ok) throw new Error("Network response was not ok");
+          const json = await res.json();
+          if (json.code === 200 && json.data && json.data.length === 2) {
+            const uthmaniEdition = json.data[0];
+            const muyassarEdition = json.data[1];
+            
+            const parsed = uthmaniEdition.ayahs.map((ayah: any, index: number) => {
+              let text = ayah.text;
+              const bismillah = "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ";
+              // Normalize First Verse Bismillah if needed
+              if (ayah.numberInSurah === 1 && surahNum !== 1) {
+                if (text.startsWith(bismillah)) {
+                  text = text.replace(bismillah, "").trim();
+                }
+              }
+              return {
+                number: ayah.numberInSurah,
+                text: text,
+                tafsir: muyassarEdition.ayahs[index]?.text || "التفسير غير متوفر حالياً."
+              };
+            });
+            setFullVerses(parsed);
+          } else {
+            throw new Error("Invalid json format from Quran API");
+          }
+        } catch (e) {
+          console.error("Error fetching full Quran surah:", e);
+          setLoadError("لم نتمكن من تنزيل كامل آيات السورة حالياً من الخادم لعدم توفر اتصال بالإنترنت. تم تفعيل آيات الدرس المحفوظة محلياً لاستمرار الحفظ والتلاوة.");
+        } finally {
+          setIsLoadingFullSurah(false);
+        }
+      };
+
+      fetchFullSurah();
+    }
+  }, [activeTab, lesson.id, matchedSurah, fullVerses.length]);
+
+  const playVerseAudio = (verseNumber: number) => {
+    // If we click the currently playing verse, pause it
+    if (playingVerseNumber === verseNumber) {
+      if (verseAudioInstance) {
+        verseAudioInstance.pause();
+        verseAudioInstance.src = '';
+      }
+      setPlayingVerseNumber(null);
+      setVerseAudioInstance(null);
+      return;
+    }
+
+    // Stop current verse audio if playing
+    if (verseAudioInstance) {
+      verseAudioInstance.pause();
+      verseAudioInstance.src = '';
+      setVerseAudioInstance(null);
+    }
+
+    // Stop whole Surah audio if playing
+    if (isSurahPlaying) {
+      setIsSurahPlaying(false);
+    }
+
+    setIsVerseLoading(true);
+    setPlayingVerseNumber(verseNumber);
+
+    const padSurah = matchedSurah?.surahNumber || "053";
+    const padVerse = String(verseNumber).padStart(3, '0');
+    const url = `https://everyayah.com/data/Alafasy_128kbps/${padSurah}${padVerse}.mp3`;
+
+    const audio = new Audio(url);
+    audio.play()
+      .then(() => {
+        setIsVerseLoading(false);
+      })
+      .catch(e => {
+        console.error("Error playing verse recitation: ", e);
+        setIsVerseLoading(false);
+        setPlayingVerseNumber(null);
+      });
+
+    audio.onended = () => {
+      setPlayingVerseNumber(null);
+      setVerseAudioInstance(null);
+    };
+
+    setVerseAudioInstance(audio);
+  };
 
   // Safely manage Quran audio playing
   useEffect(() => {
     if (isSurahPlaying && matchedSurah?.audioUrl) {
+      // Pause any single verse audio
+      if (verseAudioInstance) {
+        verseAudioInstance.pause();
+        verseAudioInstance.src = '';
+        setVerseAudioInstance(null);
+        setPlayingVerseNumber(null);
+      }
+
       const audio = new Audio(matchedSurah.audioUrl);
       audio.play().catch(e => {
         console.error("Error playing recitation stream: ", e);
@@ -150,8 +282,12 @@ export default function IllustratedStory({
         audioInstance.pause();
         audioInstance.src = '';
       }
+      if (verseAudioInstance) {
+        verseAudioInstance.pause();
+        verseAudioInstance.src = '';
+      }
     };
-  }, [audioInstance, activeTab, lesson.id]);
+  }, [audioInstance, verseAudioInstance, activeTab, lesson.id]);
 
   const currentSlide = lesson.slides[currentPage];
   const slideOverrideKey = `${lesson.id}_slide_${currentSlide?.id}`;
@@ -741,11 +877,38 @@ export default function IllustratedStory({
                       التفسير الميسَّر للآية {selectedQuranAyah}
                     </span>
                     
-                    <p className="text-xs font-bold text-[#B08933] leading-relaxed mb-2 mt-1">
-                      " {matchedSurah.highlightedVerses.find(v => v.number === selectedQuranAyah)?.text} "
-                    </p>
+                    <div className="flex justify-between items-start gap-3 mt-1 mb-2">
+                      <p className="text-xs font-bold text-[#B08933] leading-relaxed flex-1">
+                        " {(() => {
+                          const activeVersesList = fullVerses.length > 0 ? fullVerses : (matchedSurah?.highlightedVerses || []);
+                          return activeVersesList.find(v => v.number === selectedQuranAyah)?.text || "";
+                        })()} "
+                      </p>
+                      
+                      <button
+                        onClick={() => playVerseAudio(selectedQuranAyah)}
+                        className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                          playingVerseNumber === selectedQuranAyah
+                            ? 'bg-[#B08933] text-white shadow-md'
+                            : 'bg-white border border-[#DCD3C1] text-[#B08933] hover:bg-amber-100/50'
+                        } cursor-pointer flex-shrink-0`}
+                        title="تلاوة الآية الكريمة منفردة"
+                      >
+                        {isVerseLoading && playingVerseNumber === selectedQuranAyah ? (
+                          <div className="w-4.5 h-4.5 border-2 border-[#B08933] border-t-transparent rounded-full animate-spin"></div>
+                        ) : playingVerseNumber === selectedQuranAyah ? (
+                          <Pause className="w-4 h-4 text-white" />
+                        ) : (
+                          <Volume2 className="w-4 h-4 text-[#B08933]" />
+                        )}
+                      </button>
+                    </div>
+
                     <p className="text-[11px] text-[#4A453E] leading-relaxed font-semibold">
-                      {matchedSurah.highlightedVerses.find(v => v.number === selectedQuranAyah)?.tafsir}
+                      {(() => {
+                        const activeVersesList = fullVerses.length > 0 ? fullVerses : (matchedSurah?.highlightedVerses || []);
+                        return activeVersesList.find(v => v.number === selectedQuranAyah)?.tafsir || "انقر على آية لعرض تفسيرها.";
+                      })()}
                     </p>
                   </motion.div>
                 )}
@@ -754,7 +917,7 @@ export default function IllustratedStory({
               {/* Back advice / guidance */}
               <div className="bg-[#FAF9F6] border border-[#DCD3C1] p-3 rounded-xl mt-4">
                 <p className="text-[10px] text-[#8E8268] font-bold text-center leading-relaxed">
-                  💡 انقر على أي آية مباركة في الصفحة المقابلة وسيظهر لك التفسير الميسر فوراً ومكانها في السورة!
+                  💡 انقر على أي آية مباركة لتلاوتها بصورة فورية عذبة مع تبيان تفسيرها الميسر وموضعها!
                 </p>
               </div>
             </div>
@@ -767,9 +930,18 @@ export default function IllustratedStory({
                     <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#B08933]"></span>
                     <span>المصحف الشريف المبارك</span>
                   </h3>
-                  <span className="text-[10px] font-extrabold text-[#8E8268]" dir="rtl">
-                    طريقة العرض: مصحف المدينة المنورة 📖
-                  </span>
+                  <div className="text-[10px] font-extrabold text-[#8E8268]" dir="rtl">
+                    {isLoadingFullSurah ? (
+                      <span className="text-emerald-600 flex items-center gap-1.5 animate-pulse">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                        جاري تحميل السورة كاملةً...
+                      </span>
+                    ) : fullVerses.length > 0 ? (
+                      <span className="text-[#B08933] bg-[#B08933]/10 px-2 py-0.5 rounded-lg">السورة كاملة من المصحف 📖</span>
+                    ) : (
+                      <span className="text-amber-800 bg-amber-100/50 px-2 py-0.5 rounded-lg">مختارات الدرس الشريفة 📖</span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="bg-[#F7F3E9] border border-[#E9E1CD] rounded-2xl p-6 md:p-8 relative min-h-[300px] overflow-y-auto max-h-[400px]">
@@ -777,6 +949,12 @@ export default function IllustratedStory({
                   <div className="absolute inset-0 opacity-5 flex items-center justify-center pointer-events-none">
                     <span className="text-9xl">📖</span>
                   </div>
+
+                  {loadError && (
+                    <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[10px] p-2.5 rounded-xl mb-4 font-bold text-center leading-relaxed">
+                      {loadError}
+                    </div>
+                  )}
 
                   <div className="space-y-4" dir="rtl">
                     {/* Bismillah block */}
@@ -788,22 +966,32 @@ export default function IllustratedStory({
 
                     {/* Flowing text representation */}
                     <p className="text-right leading-[2.5rem] md:leading-[3rem] text-[#333333] select-none text-md md:text-xl font-medium">
-                      {matchedSurah.highlightedVerses.map((verse) => (
+                      {(fullVerses.length > 0 ? fullVerses : (matchedSurah?.highlightedVerses || [])).map((verse) => (
                         <span
                           key={verse.number}
                           onClick={() => {
                             setSelectedQuranAyah(verse.number);
-                            SoundEngine.playSparkle();
+                            playVerseAudio(verse.number);
                           }}
-                          className={`cursor-pointer inline-block mx-1.5 px-2 py-1 rounded-xl transition ${
+                          className={`cursor-pointer inline-block mx-1.5 px-2.5 py-1.5 rounded-xl transition-all duration-300 relative ${
                             selectedQuranAyah === verse.number
-                              ? 'bg-amber-100 border border-[#B08933] font-black text-[#B08933] scale-105'
-                              : 'hover:bg-[#E9E1CD]/50 hover:text-emerald-800'
+                              ? 'bg-amber-100 border-2 border-[#B08933] font-black text-[#B08933] scale-105 shadow-sm'
+                              : 'hover:bg-[#E9E1CD]/50 hover:text-emerald-800 border-2 border-transparent'
+                          } ${
+                            playingVerseNumber === verse.number
+                              ? 'ring-2 ring-emerald-500 bg-emerald-50/70 text-emerald-800 border-emerald-500 font-bold'
+                              : ''
                           }`}
                         >
                           {verse.text} 
-                          <span className="inline-flex items-center justify-center w-6 h-6 mr-1.5 text-[9px] text-[#B08933] border border-[#B08933]/50 rounded-full font-bold bg-[#FAF9F6]">
-                            {verse.number}
+                          <span className={`inline-flex items-center justify-center w-6 h-6 mr-1.5 text-[9px] border rounded-full font-bold transition-all ${
+                            playingVerseNumber === verse.number
+                              ? 'bg-emerald-500 text-white border-emerald-500 animate-pulse'
+                              : selectedQuranAyah === verse.number
+                                ? 'bg-[#B08933] text-white border-[#B08933]'
+                                : 'bg-[#FAF9F6] text-[#B08933] border-[#B08933]/50'
+                          }`}>
+                            {playingVerseNumber === verse.number ? "🔊" : verse.number}
                           </span>
                         </span>
                       ))}
@@ -814,7 +1002,7 @@ export default function IllustratedStory({
 
               {/* Progress and status decoration */}
               <div className="mt-6 border-t border-[#DCD3C1] pt-4 flex justify-between items-center text-[10px] font-bold text-[#8E8268]">
-                <span>عدد الآيات المعروضة: {matchedSurah.highlightedVerses.length} آيات كريمة</span>
+                <span>عدد الآيات المعروضة: {(fullVerses.length > 0 ? fullVerses : (matchedSurah?.highlightedVerses || [])).length} آيات كريمة</span>
                 <span className="text-[#B08933]">« اقرأ وارتقِ ورتّل كما كنت ترتل في الدنيا »</span>
               </div>
             </div>

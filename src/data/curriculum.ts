@@ -40,12 +40,12 @@ export const unitsData: Unit[] = [
   },
   {
     id: 4,
-    title: "الوحدة الرابعة: العقيدة الإسلامية",
-    shortTitle: "العقيدة واليقين 🛡️",
-    desc: "شرح شامل ومفصل لأسماء الله الحسنى، وحقيقة الإيمان بمتعلقات اليوم الآخر وعذاب القبر ونعيمه.",
+    title: "الوحدة الرابعة: العقيدة والتوحيد وأسماء الله الحسنى",
+    shortTitle: "العقيدة والتّوحيد 🌟",
+    desc: "دراسة وتأمل في أسماء الله الحسنى ومجموعاتها الثلاث، واستيعاب حقيقة الإيمان بالبعث واليوم الآخر وعذاب القبر ونعيمه.",
     icon: "ShieldAlert",
-    color: "purple",
-    gradient: "from-purple-50 to-indigo-50 dark:from-purple-950 dark:to-indigo-950",
+    color: "amber",
+    gradient: "from-amber-50 to-yellow-50 dark:from-amber-950 dark:to-yellow-950",
     lessons: ["names-of-allah-1", "names-of-allah-2", "names-of-allah-3", "grave-punishment"]
   },
   {
@@ -54,24 +54,23 @@ export const unitsData: Unit[] = [
     shortTitle: "الفقه والعبادات 🕌",
     desc: "دليل فقهي كامل لفرائض وسنن الصلاة، مبطلاتها ومكروهاتها، وصلاة الجمعة المباركة وصلاة العيدين.",
     icon: "Award",
-    color: "blue",
-    gradient: "from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950",
+    color: "purple",
+    gradient: "from-purple-50 to-indigo-50 dark:from-purple-950 dark:to-indigo-950",
     lessons: ["prayer-obligations-sunnahs", "prayer-invalidators", "prayer-disliked-acts", "friday-prayer", "eid-prayers"]
   },
   {
     id: 6,
     title: "الوحدة السادسة: من سيرة النبي والصحابة",
-    shortTitle: "السيرة والصحابة 👥",
-    desc: "رحلة الإسراء والمعراج، وبيعتا العقبة الأولى والثانية، وسير الأبطال الكرام: أبي بكر، زيد بن حارثة، وأبي ذر الغفاري.",
+    shortTitle: "السيرة والشخصيات 👥",
+    desc: "تفاصيل ملهمة من السيرة النبوية العطرة، ورحلة الإسراء والمعراج، وبيعتي العقبة، وقصص الصحابة الموجهين بالحق.",
     icon: "Users",
-    color: "indigo",
-    gradient: "from-indigo-50 to-purple-50 dark:from-indigo-950 dark:to-purple-950",
+    color: "blue",
+    gradient: "from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950",
     lessons: ["isra-and-miraj", "aqabah-pledge-1", "aqabah-pledge-2", "companion-abu-bakr", "companion-zaid-bin-harithah", "companion-abu-dharr-al-ghifari"]
   }
 ];
 
 export const lessonsData: Lesson[] = [
-  // UNIT 1: السور والتجويد
   {
     id: "surat-al-najm",
     title: "سورة النجم: رحلة الوحي ومقامات السماء",
@@ -86,7 +85,7 @@ export const lessonsData: Lesson[] = [
         id: 1,
         title: "رحلة الوحي والنور الساطعة",
         narrative: "أهلاً بك يا بطل النور في سورة النجم! تبدأ هذه السورة الكريمة بقسم رباني عظيم بالنجم إذا مال وغاب، لتؤكد أعظم حقيقة: نبي الرحمة محمد صلى الله عليه وسلم ما ضلّ وما انحرف عن طريق الرشاد، وما ينطق بالهوى، بل كل كلامه وحي يوحى إليه صدقاً وعطفاً وإرشاداً.",
-        highlightVerse: "وَمَا يَنطِقُ عَنِ الْهَوَىٰ * إِنْ هُوَ إِلَّا وَحْيٌ يُوحَىٰ",
+        highlightVerse: "وَمَا يَنطِقُ عَنِ ٱلْهَوَىٰٓ * إِنْ هُوَ إِلَّا وَحْيٌ يُوعَىٰ",
         imageUrl: "space_stars_nebula",
         illustrationType: "space"
       },
@@ -94,7 +93,7 @@ export const lessonsData: Lesson[] = [
         id: 2,
         title: "الملك ذو القوة العظمى: جبريل عليه السلام",
         narrative: "من الذي تولى تعليم نبينا القرآن؟ إنه الملك العظيم جبريل عليه السلام، أمين الوحي في السماء، الذي وصفه الله بـ 'شديد القوى' لقوته الخارقة الكريمة، و'ذو مِرّة' أي ذو خلقة تامة ومنظر حسن بهي ممتد بالأفق الساطع الأبهى، وقد رآه النبي بصورته الحقيقية وله ستمائة جناح تسد الأفق.",
-        highlightVerse: "عَلَّمَهُ شَدِيدُ الْقُوَىٰ * ذُو مِرَّةٍ فَاسْتَوَىٰ",
+        highlightVerse: "عَلَّمَهُۥ شَدِيدُ ٱلْقُوَىٰ * ذُو مِرَّةٍ فَٱسْتَوَىٰ",
         imageUrl: "shining_angel_star",
         illustrationType: "stars"
       },
@@ -102,15 +101,15 @@ export const lessonsData: Lesson[] = [
         id: 3,
         title: "المسير لـ سدرة المنتهى",
         narrative: "في المعراج الإعجازي المهيب، ارتقى نبينا صلى الله عليه وسلم برفقة الملك جبريل حتى تجاوزا السماوات السبع ووصلا لأقصى نقطة ينتهي إليها علم الخلائق: 'سدرة المنتهى'. وهي شجرة نبق عظيمة البهاء يغشاها من نور الله ونور عرشه العظيم كل جمال رائع، وبجوارها جنة المأوى الموعودة للمتقين الصالحين.",
-        highlightVerse: "عِندَ سِدْرَةِ الْمُنتَهَىٰ * عِندَهَا جَنَّةُ الْمَأْوَىٰ",
+        highlightVerse: "عِندَ سِدْرَةِ ٱلْمُنتَهَىٰ * عِندَهَا جَنَّةُ ٱلْمَأْوَىٰ",
         imageUrl: "lote_tree_glowing_heaven",
         illustrationType: "space"
       }
     ],
     vocabulary: [
-      { word: "وَمَا يَنطِقُ عَنِ الْهَوَىٰ", meaning: "لا يصدر كلامه عن مصلحة ذاتية أو ميل شخصي بل هو توجيه العزيز العليم." },
-      { word: "شَدِيدُ الْقُوَىٰ", meaning: "أمين السماء الروح جبريل عليه السلام صاحب البطش الشديد بأمر الله." },
-      { word: "سِدْرَةِ الْمُنتَهَىٰ", meaning: "شجرة نبق مباركة في نهاية السماء السابعة تليها الجنة الإلهية." }
+      { word: "ذُو مِرَّةٍ", meaning: "ذو منظر جميل بهي، وعقل راجح، وقوة وخلقة تامة سليمة." },
+      { word: "سِدْرَةِ ٱلْمُنتَهَىٰ", meaning: "شجرة نبق عظيمة في السماء السابعة ينتهي إليها علم الخلائق." },
+      { word: "جَنَّةُ ٱلْمَأْوَىٰ", meaning: "الجنة الموعودة التي يسكن إليها المتقون والشهداء." }
     ],
     quiz: [
       {
