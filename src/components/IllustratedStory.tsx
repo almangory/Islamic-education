@@ -22,6 +22,27 @@ import { Lesson, StorySlide, VocabularyWord } from '../types';
 import SoundEngine from '../lib/audio';
 import imageOverridesStatic from '../data/image_overrides.json';
 
+// Helper function to extract Google Drive file ID
+const extractGoogleDriveId = (url: string | undefined): string | null => {
+  if (!url) return null;
+  const matches = url.match(/\/file\/d\/([a-zA-Z0-9-_]+)/) || url.match(/[?&]id=([a-zA-Z0-9-_]+)/) || url.match(/\/uc\?export=view&id=([a-zA-Z0-9-_]+)/);
+  return matches ? matches[1] : null;
+};
+
+// Helper function to check if a URL is likely a direct video file
+const isDirectVideoUrl = (url: string | undefined): boolean => {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.ogg') || lower.endsWith('.mov') || lower.endsWith('.m4v') || lower.includes('/raw-video');
+};
+
+// Helper function to extract YouTube video ID
+const extractYouTubeId = (url: string | undefined): string | null => {
+  if (!url) return null;
+  const matches = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/ ]{11})/i);
+  return matches ? matches[1] : null;
+};
+
 // Helper function to extract Google Drive file ID and convert to direct image link
 const getGoogleDriveDirectImageUrl = (url: string | undefined): string | undefined => {
   if (!url) return undefined;
@@ -38,20 +59,77 @@ const getGoogleDriveDirectImageUrl = (url: string | undefined): string | undefin
 
 interface ImageWithFallbackProps { 
   src: string; 
+  originalUrl: string;
   alt: string; 
   fallbackType: string | undefined;
   renderFallback: (type: string | undefined) => React.ReactNode;
 }
 
-const ImageWithFallback = ({ src, alt, fallbackType, renderFallback }: ImageWithFallbackProps) => {
-  const [error, setError] = useState(false);
+const ImageWithFallback = ({ src, originalUrl, alt, fallbackType, renderFallback }: ImageWithFallbackProps) => {
+  const [mode, setMode] = useState<'image' | 'video' | 'drive-video' | 'youtube' | 'fallback'>('image');
 
-  // Reset error state when src changes
+  // Reset or detect appropriate mode when the URL changes (page transition)
   useEffect(() => {
-    setError(false);
-  }, [src]);
+    if (isDirectVideoUrl(originalUrl)) {
+      setMode('video');
+    } else if (extractYouTubeId(originalUrl)) {
+      setMode('youtube');
+    } else {
+      setMode('image');
+    }
+  }, [originalUrl]);
 
-  if (error) {
+  if (mode === 'fallback') {
+    return <>{renderFallback(fallbackType)}</>;
+  }
+
+  if (mode === 'video') {
+    return (
+      <div className="relative w-full h-full min-h-[220px] bg-black flex items-center justify-center rounded-2xl overflow-hidden border border-[#DCD3C1]">
+        <video
+          src={src}
+          controls
+          autoPlay
+          muted
+          playsInline
+          loop
+          className="w-full h-full max-h-[300px] object-contain"
+        />
+      </div>
+    );
+  }
+
+  if (mode === 'youtube') {
+    const ytId = extractYouTubeId(originalUrl);
+    if (ytId) {
+      return (
+        <div className="relative w-full h-full min-h-[220px] bg-black flex items-center justify-center rounded-2xl overflow-hidden border border-[#DCD3C1] aspect-video">
+          <iframe
+            src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&rel=0`}
+            className="w-full h-full min-h-[250px] md:min-h-[280px] border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+      );
+    }
+    return <>{renderFallback(fallbackType)}</>;
+  }
+
+  if (mode === 'drive-video') {
+    const driveId = extractGoogleDriveId(originalUrl);
+    if (driveId) {
+      return (
+        <div className="relative w-full h-full min-h-[220px] bg-black flex items-center justify-center rounded-2xl overflow-hidden border border-[#DCD3C1] aspect-video">
+          <iframe
+            src={`https://drive.google.com/file/d/${driveId}/preview?autoplay=1`}
+            className="w-full h-full min-h-[250px] md:min-h-[280px] border-0"
+            allow="autoplay; encrypted-media; fullscreen"
+            allowFullScreen
+          />
+        </div>
+      );
+    }
     return <>{renderFallback(fallbackType)}</>;
   }
 
@@ -62,7 +140,15 @@ const ImageWithFallback = ({ src, alt, fallbackType, renderFallback }: ImageWith
         alt={alt}
         className="w-full h-full object-cover max-h-[300px]"
         referrerPolicy="no-referrer"
-        onError={() => setError(true)}
+        onError={() => {
+          // If viewing as photo fails, check if we can stream it as a Google Drive video
+          const driveId = extractGoogleDriveId(originalUrl);
+          if (driveId) {
+            setMode('drive-video');
+          } else {
+            setMode('fallback');
+          }
+        }}
       />
     </div>
   );
@@ -267,6 +353,7 @@ export default function IllustratedStory({
       return (
         <ImageWithFallback 
           src={directUrl || ''} 
+          originalUrl={imageUrl || ''}
           alt="لوحة تعبيرية للدرس" 
           fallbackType={type}
           renderFallback={(t) => renderFallbackIllustration(t)}
