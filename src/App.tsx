@@ -408,7 +408,7 @@ export default function App() {
                 id="tab-btn-books"
               >
                 <BookOpen className="w-5 h-5 shrink-0" />
-                <span>كتب القصص المصورة تفاعلياً</span>
+                <span>المنهج الرسمي 📖</span>
               </button>
 
               <button
@@ -421,7 +421,7 @@ export default function App() {
                 id="tab-btn-stories"
               >
                 <Sparkles className="w-5 h-5 shrink-0 text-[#D48166]" />
-                <span>مكتبة القصص الخارجية 📔</span>
+                <span>المكتبة المصورة لكتب المنهج 📚</span>
               </button>
 
               <button
