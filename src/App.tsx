@@ -26,8 +26,9 @@ import {
   BookOpenCheck
 } from 'lucide-react';
 
-import { Lesson, StudentProgress, Badge } from './types';
+import { Lesson, StudentProgress, Badge, QuizQuestion } from './types';
 import { lessonsData, unitsData, badgesList } from './data/curriculum';
+import { lessonQuizzes } from './data/lessonQuizzes';
 import SoundEngine from './lib/audio';
 import IllustratedStory from './components/IllustratedStory';
 import QuizSystem, { grandFinalExam } from './components/QuizSystem';
@@ -56,8 +57,80 @@ export default function App() {
   // Active sessions
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<Lesson | null>(null);
+  const [activeQuizQuestions, setActiveQuizQuestions] = useState<QuizQuestion[]>([]);
   const [activeGrandFinal, setActiveGrandFinal] = useState<boolean>(false);
   const [unlockedBadge, setUnlockedBadge] = useState<Badge | null>(null);
+
+  // Advanced Quiz Configurator states
+  const [quizScope, setQuizScope] = useState<'comprehensive' | 'unit' | 'lesson'>('comprehensive');
+  const [quizSelectedUnitId, setQuizSelectedUnitId] = useState<number>(1);
+  const [quizSelectedLessonId, setQuizSelectedLessonId] = useState<string>('surat-al-najm');
+  const [quizQuestionCount, setQuizQuestionCount] = useState<number>(40);
+  const [startedConfiguredQuiz, setStartedConfiguredQuiz] = useState<boolean>(false);
+  const [configuredQuizTitle, setConfiguredQuizTitle] = useState<string>('');
+  const [configuredQuestions, setConfiguredQuestions] = useState<QuizQuestion[]>([]);
+
+  // Compile chosen quiz size and parameters dynamically
+  const compileSelectedQuestions = () => {
+    let pool: QuizQuestion[] = [];
+    
+    if (quizScope === 'comprehensive') {
+      // 1. Collect all questions from lessonQuizzes record
+      const lessonPool = Object.values(lessonQuizzes).flat();
+      
+      // 2. Also include questions from predefined grandFinalExam in QuizSystem
+      const finalExamPool = grandFinalExam.map((q, idx) => ({
+        ...q,
+        id: q.id + idx * 1000 // Guarantee unique ID to avoid collision
+      }));
+      
+      // Filter out duplicates based on exact question text matching
+      const seenTexts = new Set<string>();
+      for (const q of [...lessonPool, ...finalExamPool]) {
+        if (!seenTexts.has(q.question)) {
+          seenTexts.add(q.question);
+          pool.push(q);
+        }
+      }
+    } else if (quizScope === 'unit') {
+      const targetUnit = unitsData.find(u => u.id === quizSelectedUnitId);
+      if (targetUnit) {
+        targetUnit.lessons.forEach(lId => {
+          const questions = lessonQuizzes[lId] || [];
+          pool = [...pool, ...questions];
+        });
+      }
+    } else if (quizScope === 'lesson') {
+      pool = lessonQuizzes[quizSelectedLessonId] || [];
+    }
+    
+    // Shuffle the pool of unique questions
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    
+    // Slice to the configured size
+    return shuffled.slice(0, quizQuestionCount);
+  };
+
+  // Generate 10 questions for lesson quiz on activate
+  useEffect(() => {
+    if (activeQuiz) {
+      const lessonOwnQuestions = activeQuiz.quiz || [];
+      const otherLessonsQuestions = lessonsData
+        .filter(l => l.id !== activeQuiz.id)
+        .flatMap(l => l.quiz || []);
+      
+      // Shuffle other questions to create a random set
+      const shuffledOthers = [...otherLessonsQuestions].sort(() => 0.5 - Math.random());
+      
+      // Combine target lesson questions + additional questions as needed to make 10 questions
+      const neededCount = Math.max(0, 10 - lessonOwnQuestions.length);
+      const selectedOthers = shuffledOthers.slice(0, neededCount);
+      
+      setActiveQuizQuestions([...lessonOwnQuestions, ...selectedOthers]);
+    } else {
+      setActiveQuizQuestions([]);
+    }
+  }, [activeQuiz]);
 
   // Load progress on mount
   useEffect(() => {
@@ -368,10 +441,10 @@ export default function App() {
         )}
 
         {/* Render quiz session if active */}
-        {activeQuiz && (
+        {activeQuiz && activeQuizQuestions.length > 0 && (
           <QuizSystem
             quizTitle={`اختبار كتاب: ${activeQuiz.title}`}
-            questions={activeQuiz.quiz}
+            questions={activeQuizQuestions}
             onBack={() => {
               setActiveQuiz(null);
               SoundEngine.playSparkle();
@@ -380,17 +453,244 @@ export default function App() {
           />
         )}
 
-        {/* Render Grand final exam of all units */}
+        {/* Render Grand final exam selector screen OR actual quiz session */}
         {activeGrandFinal && (
-          <QuizSystem
-            quizTitle="الامتحان النهائي الكبير: حارس نجوم المعرفة 🌌"
-            questions={grandFinalExam}
-            onBack={() => {
-              setActiveGrandFinal(false);
-              SoundEngine.playSparkle();
-            }}
-            onQuizCompleted={(pct, stars) => handleQuizCompleted(pct, stars, "grand-final-exam")}
-          />
+          !startedConfiguredQuiz ? (
+            <div className="max-w-3xl mx-auto bg-[#FAF9F6] border-2 border-[#D48166] rounded-3xl p-8 shadow-xl text-right text-[#4D453E] relative overflow-hidden my-8" id="quiz-configurator-panel">
+              {/* Decorative top bar */}
+              <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 via-[#D48166] to-emerald-400"></div>
+              
+              <div className="flex justify-between items-center mb-6">
+                <button
+                  onClick={() => {
+                    setActiveGrandFinal(false);
+                    SoundEngine.playSparkle();
+                  }}
+                  className="bg-[#DCD3C1]/50 hover:bg-[#C2B7A2] text-[#4A453E] text-xs font-bold py-2 px-4 rounded-xl flex items-center gap-1 transition active:scale-95 cursor-pointer"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                  <span>العودة للرئيسية</span>
+                </button>
+                <div className="flex items-center gap-2">
+                  <span className="p-2 bg-[#D48166]/10 text-[#D48166] rounded-xl">
+                    <Trophy className="w-6 h-6" />
+                  </span>
+                  <h2 className="text-xl font-black font-sans text-[#3A452E]">ممر الاختبارات والتقييم الشامل 🌌</h2>
+                </div>
+              </div>
+              
+              <p className="text-xs text-[#8E8268] mb-8 leading-relaxed font-semibold">
+                مرحباً بك في ممر الاختبارات الذكية لطلبة الصف السادس الابتدائي. هنا يمكنك تخصيص نوع وطبيعة الاختبار الذي تود خوضه، واختيار الدرس أو الوحدة، وتحديد عدد الأسئلة بدقة لتحدي قدراتك وتحصيل النجوم المستحقة!
+              </p>
+              
+              <div className="space-y-6">
+                {/* 1. Scope Selector */}
+                <div className="space-y-3">
+                  <label className="block text-xs font-black text-[#5A6B47] mb-1">حدد نطاق ومجال الاختبار:</label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button
+                      onClick={() => { setQuizScope('comprehensive'); SoundEngine.playSparkle(); }}
+                      className={`p-4 rounded-2xl border-2 text-right transition-all flex flex-col justify-between h-28 cursor-pointer ${
+                        quizScope === 'comprehensive'
+                          ? 'border-[#D48166] bg-[#D48166]/5 shadow-sm shadow-[#D48166]/10'
+                          : 'border-[#DCD3C1] bg-white hover:border-[#8E8268]'
+                      }`}
+                    >
+                      <div className="flex justify-between w-full items-start">
+                        <span className={`p-1.5 rounded-lg text-xs font-black ${quizScope === 'comprehensive' ? 'bg-[#D48166] text-white' : 'bg-gray-100 text-gray-500'}`}>
+                          <Sparkles className="w-4 h-4" />
+                        </span>
+                        <span className="text-xs font-black text-[#3A452E]">شامل بالكامل</span>
+                      </div>
+                      <span className="text-[10px] text-[#8E8268] font-medium leading-normal">
+                        اختبار عشوائي واسع النطاق يغطي جميع دروس وعطايا المنهج بالكامل (الوحدات الستة).
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => { setQuizScope('unit'); SoundEngine.playSparkle(); }}
+                      className={`p-4 rounded-2xl border-2 text-right transition-all flex flex-col justify-between h-28 cursor-pointer ${
+                        quizScope === 'unit'
+                          ? 'border-[#5A6B47] bg-[#5A6B47]/5 shadow-sm shadow-[#5A6B47]/10'
+                          : 'border-[#DCD3C1] bg-white hover:border-[#8E8268]'
+                      }`}
+                    >
+                      <div className="flex justify-between w-full items-start">
+                        <span className={`p-1.5 rounded-lg text-xs font-black ${quizScope === 'unit' ? 'bg-[#5A6B47] text-white' : 'bg-gray-100 text-gray-500'}`}>
+                          <BookOpen className="w-4 h-4" />
+                        </span>
+                        <span className="text-xs font-black text-[#3A452E]">اختبار لوحدة</span>
+                      </div>
+                      <span className="text-[10px] text-[#8E8268] font-medium leading-normal">
+                        ركز مراجعتك على وحدة دراسية مخصصة من الوحدات الستة لتثبيت ركائزها وفهمها.
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => { setQuizScope('lesson'); SoundEngine.playSparkle(); }}
+                      className={`p-4 rounded-2xl border-2 text-right transition-all flex flex-col justify-between h-28 cursor-pointer ${
+                        quizScope === 'lesson'
+                          ? 'border-[#3B82F6] bg-[#3B82F6]/5 shadow-sm shadow-[#3B82F6]/10'
+                          : 'border-[#DCD3C1] bg-white hover:border-[#8E8268]'
+                      }`}
+                    >
+                      <div className="flex justify-between w-full items-start">
+                        <span className={`p-1.5 rounded-lg text-xs font-black ${quizScope === 'lesson' ? 'bg-[#3B82F6] text-white' : 'bg-gray-100 text-gray-500'}`}>
+                          <HelpIcon className="w-4 h-4" />
+                        </span>
+                        <span className="text-xs font-black text-[#3A452E]">اختبار لدرس معين</span>
+                      </div>
+                      <span className="text-[10px] text-[#8E8268] font-medium leading-normal">
+                        اختبار دقيق ومعمق مخصص لدرس واحد بعينه من المنهج للمراجعة المستهدفة والذكية.
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-selectors based on scope */}
+                {quizScope === 'unit' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-[#FAF9F6] border border-[#5A6B47]/30 p-4 rounded-2xl space-y-2 text-right"
+                  >
+                    <label className="block text-xs font-black text-[#5A6B47]">اختر الوحدة الدراسية المستهدفة:</label>
+                    <select
+                      value={quizSelectedUnitId}
+                      onChange={(e) => {
+                        setQuizSelectedUnitId(Number(e.target.value));
+                        SoundEngine.playSparkle();
+                      }}
+                      className="w-full p-3 bg-white border border-[#DCD3C1] rounded-xl text-xs font-bold text-[#4D453E] focus:outline-none focus:border-[#5A6B47] cursor-pointer"
+                    >
+                      {unitsData.map(unit => (
+                        <option key={unit.id} value={unit.id}>
+                          {unit.title}
+                        </option>
+                      ))}
+                    </select>
+                  </motion.div>
+                )}
+
+                {quizScope === 'lesson' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-[#FAF9F6] border border-[#3B82F6]/30 p-4 rounded-2xl space-y-2 text-right"
+                  >
+                    <label className="block text-xs font-black text-[#3B82F6]">اختر الدرس المبارك المراد اختباره:</label>
+                    <select
+                      value={quizSelectedLessonId}
+                      onChange={(e) => {
+                        setQuizSelectedLessonId(e.target.value);
+                        SoundEngine.playSparkle();
+                      }}
+                      className="w-full p-3 bg-white border border-[#DCD3C1] rounded-xl text-xs font-bold text-[#4D453E] focus:outline-none focus:border-[#3B82F6] cursor-pointer"
+                    >
+                      {lessonsData.map(lesson => (
+                        <option key={lesson.id} value={lesson.id}>
+                          {lesson.title} ({unitsData.find(u => u.id === lesson.unitId)?.shortTitle})
+                        </option>
+                      ))}
+                    </select>
+                  </motion.div>
+                )}
+
+                {/* 2. Number of Questions Selector */}
+                <div className="space-y-3">
+                  <label className="block text-xs font-black text-[#5A6B47] mb-1">حدد عدد الأسئلة المطلوبة في الاختبار:</label>
+                  <div className="flex flex-wrap gap-2 justify-start">
+                    {[5, 10, 15, 20, 30, 40].map((num) => {
+                      let label = '';
+                      if (num === 5) label = '٥ أسئلة ⚡';
+                      else if (num === 10) label = '١٠ أسئلة 📝';
+                      else if (num === 15) label = '١٥ سؤالاً 🌟';
+                      else if (num === 20) label = '٢٠ سؤالاً 🏆';
+                      else if (num === 30) label = '٣٠ سؤالاً 💪';
+                      else if (num === 40) label = '٤٠ سؤالاً 👑 (القصوى)';
+                      
+                      return (
+                        <button
+                          key={num}
+                          onClick={() => { setQuizQuestionCount(num); SoundEngine.playSparkle(); }}
+                          className={`py-2.5 px-4 rounded-xl text-xs font-black transition active:scale-95 cursor-pointer ${
+                            quizQuestionCount === num
+                              ? 'bg-[#D48166] text-white shadow-md shadow-[#D48166]/20'
+                              : 'bg-white border-2 border-[#DCD3C1] text-[#8E8268] hover:border-[#8E8268] hover:text-[#4D453E]'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Start Button Container */}
+              <div className="mt-10 border-t border-[#DCD3C1] pt-6 flex justify-between items-center">
+                <div className="text-right">
+                  <p className="text-[10px] text-[#8E8268] font-bold">الأسئلة المتوفرة في نطاق اختيارك:</p>
+                  <p className="text-sm font-black text-[#3A452E]">
+                    {(() => {
+                      let poolLength = 10;
+                      if (quizScope === 'comprehensive') {
+                        poolLength = Object.values(lessonQuizzes).flat().length + grandFinalExam.length;
+                      } else if (quizScope === 'unit') {
+                        poolLength = lessonsData.filter(l => l.unitId === quizSelectedUnitId).flatMap(l => lessonQuizzes[l.id] || []).length;
+                      } else if (quizScope === 'lesson') {
+                        poolLength = (lessonQuizzes[quizSelectedLessonId] || []).length;
+                      }
+                      return `${poolLength} سؤالاً منهجياً`;
+                    })()}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const selectedQuestions = compileSelectedQuestions();
+                    if (selectedQuestions.length === 0) {
+                      return;
+                    }
+                    
+                    let title = 'الامتحان المخصص 🌟';
+                    if (quizScope === 'comprehensive') {
+                      title = `الامتحان النهائي الشامل للمنهج (${quizQuestionCount} سؤالاً) 🌌`;
+                    } else if (quizScope === 'unit') {
+                      const u = unitsData.find(u => u.id === quizSelectedUnitId);
+                      title = `اختبار الوحدة: ${u?.shortTitle || ''} (${quizQuestionCount} سؤالاً) 📚`;
+                    } else if (quizScope === 'lesson') {
+                      const l = lessonsData.find(l => l.id === quizSelectedLessonId);
+                      title = `اختبار درس: ${l?.title || ''} (${quizQuestionCount} سؤالاً) 📝`;
+                    }
+                    
+                    setConfiguredQuestions(selectedQuestions);
+                    setConfiguredQuizTitle(title);
+                    setStartedConfiguredQuiz(true);
+                    SoundEngine.playTrophy();
+                  }}
+                  className="bg-[#D48166] hover:bg-[#C26F54] text-white font-black text-sm py-4 px-8 rounded-2xl flex items-center gap-2 transition active:scale-95 shadow-lg shadow-[#D48166]/20 cursor-pointer"
+                >
+                  <Trophy className="w-5 h-5" />
+                  <span>انطلق الآن في الاختبار المعيّن</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <QuizSystem
+              quizTitle={configuredQuizTitle}
+              questions={configuredQuestions}
+              onBack={() => {
+                setStartedConfiguredQuiz(false);
+                SoundEngine.playSparkle();
+              }}
+              onQuizCompleted={(pct, stars) => {
+                handleQuizCompleted(pct, stars, "grand-final-exam");
+                setStartedConfiguredQuiz(false);
+                setActiveGrandFinal(false);
+              }}
+            />
+          )
         )}
 
         {/* Home tabs menu (only show when no core sub-session is open) */}
@@ -676,7 +976,7 @@ export default function App() {
                 <div className="bg-[#FAF9F6] border border-[#DCD3C1] p-6 rounded-3xl shadow-sm">
                   <h3 className="font-extrabold text-sm text-[#3A452E] mb-2 pr-2 border-r-4 border-[#5A6B47]">اختبر معلوماتك لدرس بمفرده:</h3>
                   <p className="text-xs text-[#8E8268] leading-relaxed mb-6">
-                    كل درس يحتوي على ٤ أسئلة ذكاء لقياس الفهم، احصل على ١٠ نجوم عن كل درجة ١٠٠٪ تجتازها!
+                    كل درس يحتوي على ١٠ أسئلة ذكاء لقياس الفهم، احصل على ١٠ نجوم عن كل درجة ١٠٠٪ تجتازها!
                   </p>
 
                   <div className="space-y-4" id="individual-quizzes-list">
