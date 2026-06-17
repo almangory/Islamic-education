@@ -86,8 +86,7 @@ export const lessonsData: Lesson[] = [
         title: "رحلة الوحي والنور الساطعة",
         narrative: "أهلاً بك يا بطل النور في سورة النجم! تبدأ هذه السورة الكريمة بقسم رباني عظيم بالنجم إذا مال وغاب، لتؤكد أعظم حقيقة: نبي الرحمة محمد صلى الله عليه وسلم ما ضلّ وما انحرف عن طريق الرشاد، وما ينطق بالهوى، بل كل كلامه وحي يوحى إليه صدقاً وعطفاً وإرشاداً.",
         highlightVerse: "وَمَا يَنطِقُ عَنِ ٱلْهَوَىٰٓ * إِنْ هُوَ إِلَّا وَحْيٌ يُوعَىٰ",
-        imageUrl: "imageUrl: "https://drive.google.com/file/d/1amP2mFzUyx7mgn7shY1lYJL1WquMbzxw/view?usp=sharing",
-
+imageUrl: "https://drive.google.com/file/d/1amP2mFzUyx7mgn7shY1lYJL1WquMbzxw/view?usp=sharing",
 ",
         illustrationType: "space"
       },
