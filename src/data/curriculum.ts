@@ -228,7 +228,7 @@ export const lessonsData: Lesson[] = [
         title: "شق القمر بالصدق والمحبة",
         narrative: "طلب مشركو مكة المتكبرون برئاسة أبي جهل مستحيل الفلك: 'اقسم لنا هذا القمر في السماء نصفين لنؤمن بصدق دعوتك!'. فوجه نبي الرحمة كفيه لله العزيز، فانشق القمر بوهج مذهل نصفين متباعدين فوق سفوح مكة، وشهد القادمون بالصحراء المعجزة عياناً.",
         highlightVerse: "اقْتَرَبَتِ السَّاعَةُ وَانشَقَّ الْقَمَرُ",
-        imageUrl: "moon_split_glowing",
+        imageUrl: "https://drive.google.com/file/d/1amP2mFzUyx7mgn7shY1lYJL1WquMbzxw/view?usp=sharing",
         illustrationType: "space"
       },
       {
