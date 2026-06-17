@@ -718,6 +718,7 @@ export default function IllustratedStory({
   const [copied, setCopied] = useState<boolean>(false);
   const [showExportAllJson, setShowExportAllJson] = useState<boolean>(false);
   const [copiedExportAll, setCopiedExportAll] = useState<boolean>(false);
+  const [staticHostSuccess, setStaticHostSuccess] = useState<boolean>(false);
   
   // Full-stack dynamic override states
   const [passcode, setPasscode] = useState<string>('');
@@ -909,7 +910,13 @@ export default function IllustratedStory({
   // Sync with fullstack server overrides on mount
   useEffect(() => {
     fetch('/api/image-overrides')
-      .then(res => res.json())
+      .then(res => {
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          throw new Error("NOT_JSON");
+        }
+        return res.json();
+      })
       .then(data => {
         if (data && typeof data === 'object') {
           setCustomImages(prev => ({ ...prev, ...data }));
@@ -941,6 +948,7 @@ export default function IllustratedStory({
     }
 
     setErrorMsg('');
+    setStaticHostSuccess(false);
     setIsSaving(true);
 
     fetch('/api/update-image', {
@@ -953,6 +961,10 @@ export default function IllustratedStory({
       })
     })
     .then(async (res) => {
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("STATIC_HOST_FALLBACK");
+      }
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'فشل الاتصال بالخادم لحفظ الملف البرمجي.');
@@ -974,7 +986,27 @@ export default function IllustratedStory({
       setErrorMsg('');
     })
     .catch((err) => {
-      setErrorMsg(err.message);
+      const isStaticOrNotJson = 
+        err.message === "STATIC_HOST_FALLBACK" || 
+        err.message.includes("is not valid JSON") || 
+        err.message.includes("Unexpected token") || 
+        err.message.includes("Failed to fetch") ||
+        err.message.includes("network error");
+
+      if (isStaticOrNotJson) {
+        const updated = { ...customImages };
+        if (tempImageUrl.trim()) {
+          updated[slideOverrideKey] = tempImageUrl.trim();
+        } else {
+          delete updated[slideOverrideKey];
+        }
+        setCustomImages(updated);
+        localStorage.setItem('gdrive_image_overrides', JSON.stringify(updated));
+        setStaticHostSuccess(true);
+        setErrorMsg('');
+      } else {
+        setErrorMsg(err.message);
+      }
     })
     .finally(() => {
       setIsSaving(false);
@@ -988,6 +1020,7 @@ export default function IllustratedStory({
     }
 
     setErrorMsg('');
+    setStaticHostSuccess(false);
     setIsSaving(true);
 
     fetch('/api/update-image', {
@@ -1000,6 +1033,10 @@ export default function IllustratedStory({
       })
     })
     .then(async (res) => {
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("STATIC_HOST_FALLBACK");
+      }
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'فشل الاتصال بالخادم لإعادة التعيين.');
@@ -1016,7 +1053,23 @@ export default function IllustratedStory({
       setErrorMsg('');
     })
     .catch((err) => {
-      setErrorMsg(err.message);
+      const isStaticOrNotJson = 
+        err.message === "STATIC_HOST_FALLBACK" || 
+        err.message.includes("is not valid JSON") || 
+        err.message.includes("Unexpected token") || 
+        err.message.includes("Failed to fetch") ||
+        err.message.includes("network error");
+
+      if (isStaticOrNotJson) {
+        const updated = { ...customImages };
+        delete updated[slideOverrideKey];
+        setCustomImages(updated);
+        localStorage.setItem('gdrive_image_overrides', JSON.stringify(updated));
+        setStaticHostSuccess(true);
+        setErrorMsg('');
+      } else {
+        setErrorMsg(err.message);
+      }
     })
     .finally(() => {
       setIsSaving(false);
@@ -1976,6 +2029,25 @@ export default function IllustratedStory({
                   {errorMsg && (
                     <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-bold text-right" id="override-error-banner">
                       ⚠️ {errorMsg}
+                    </div>
+                  )}
+
+                  {/* Vercel Static success fallback notice */}
+                  {staticHostSuccess && (
+                    <div className="mb-4 p-4 bg-emerald-50 border border-emerald-500/20 text-[#3A452E] text-xs rounded-2xl text-right relative overflow-hidden shadow-sm">
+                      <div className="absolute top-0 right-0 bottom-0 w-1 bg-emerald-500"></div>
+                      <div className="flex gap-2 items-center text-emerald-800 font-extrabold mb-1.5">
+                        <span>🎉 تم حفظ التعديل بنجاح في المتصفح!</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-950 font-serif leading-relaxed font-semibold">
+                        بما أنك تشغل التطبيق على منصة <span className="font-extrabold text-emerald-800 bg-emerald-500/10 px-1 py-0.5 rounded">Vercel</span> (وهي منصة استاتيكية لا تدعم السيرفرات النشطة لتعديل الملفات البرمجية مباشرةً)، فقد قمنا بحفظ التعديل <span className="font-extrabold text-emerald-800">في ذاكرة جهازك فوراً</span>، وستراه يعكس في الصفحة مباشرة!
+                      </p>
+                      <div className="mt-3 border-t border-emerald-500/15 pt-2.5">
+                        <span className="font-extrabold text-[#3A452E] block mb-1">🔗 لجعل التعديل دائماً لجميع الزوار على Vercel:</span>
+                        <p className="text-[10px] text-emerald-950 leading-relaxed font-medium">
+                          يرجى النزول لأسفل النافذة وتوسيع بند <span className="text-emerald-800 underline font-extrabold cursor-pointer" onClick={() => setShowExportAllJson(true)}>"📋 نقل وحفظ تعديلات الصور إلى GitHub"</span> لنسخ ملف الإعدادات الكامل واستبداله في مشروعك على GitHub!
+                        </p>
+                      </div>
                     </div>
                   )}
 
