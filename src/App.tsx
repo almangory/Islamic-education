@@ -329,9 +329,54 @@ export default function App() {
           
           {/* Logo & title info */}
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-[#5A6B47] rounded-xl flex items-center justify-center shadow-md shrink-0">
-              <MoonStar className="w-7 h-7 text-white stroke-[2.5]" />
-            </div>
+            <motion.div 
+              className="w-12 h-12 bg-[#5A6B47] rounded-xl flex items-center justify-center shadow-md shrink-0 cursor-pointer relative overflow-hidden"
+              whileHover={{ 
+                scale: 1.12,
+                rotate: [0, -6, 6, -3, 3, 0],
+                transition: { duration: 0.5 }
+              }}
+              whileTap={{ scale: 0.95 }}
+              animate={{
+                y: [0, -5, 0],
+              }}
+              transition={{
+                y: {
+                  repeat: Infinity,
+                  duration: 3,
+                  ease: "easeInOut"
+                }
+              }}
+              onClick={() => {
+                SoundEngine.playSparkle();
+              }}
+            >
+              {/* Subtle shining light sweep effect */}
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full"
+                animate={{
+                  translateX: ["100%", "-100%"],
+                }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 2.5,
+                  ease: "linear",
+                  delay: 0.5
+                }}
+              />
+              <motion.div
+                animate={{
+                  scale: [1, 1.1, 1],
+                }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 2,
+                  ease: "easeInOut"
+                }}
+              >
+                <MoonStar className="w-7 h-7 text-white stroke-[2.5]" />
+              </motion.div>
+            </motion.div>
             <div>
               <h1 className="text-xl md:text-2xl font-black text-[#3A452E] tracking-tight leading-tight">دروب النور التفاعلية</h1>
               <p className="block text-[#8E8268] text-xs mt-1 text-right font-medium">
