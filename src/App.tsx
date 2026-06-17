@@ -72,61 +72,146 @@ export default function App() {
 
   // Compile chosen quiz size and parameters dynamically
   const compileSelectedQuestions = () => {
-    let pool: QuizQuestion[] = [];
+    let chosenPool: QuizQuestion[] = [];
+    let paddingPool: QuizQuestion[] = [];
     
     if (quizScope === 'comprehensive') {
-      // 1. Collect all questions from lessonQuizzes record
       const lessonPool = Object.values(lessonQuizzes).flat();
-      
-      // 2. Also include questions from predefined grandFinalExam in QuizSystem
+      const curriculumPool = lessonsData.flatMap(l => l.quiz || []);
       const finalExamPool = grandFinalExam.map((q, idx) => ({
         ...q,
-        id: q.id + idx * 1000 // Guarantee unique ID to avoid collision
+        id: q.id + idx * 1000
       }));
       
-      // Filter out duplicates based on exact question text matching
       const seenTexts = new Set<string>();
-      for (const q of [...lessonPool, ...finalExamPool]) {
-        if (!seenTexts.has(q.question)) {
+      for (const q of [...lessonPool, ...curriculumPool, ...finalExamPool]) {
+        if (q && q.question && !seenTexts.has(q.question)) {
           seenTexts.add(q.question);
-          pool.push(q);
+          chosenPool.push(q);
         }
       }
     } else if (quizScope === 'unit') {
       const targetUnit = unitsData.find(u => u.id === quizSelectedUnitId);
       if (targetUnit) {
         targetUnit.lessons.forEach(lId => {
-          const questions = lessonQuizzes[lId] || [];
-          pool = [...pool, ...questions];
+          const lesson = lessonsData.find(l => l.id === lId);
+          const lessonOwnQuestions = lesson?.quiz || [];
+          const additionalQuestions = lessonQuizzes[lId] || [];
+          chosenPool = [...chosenPool, ...lessonOwnQuestions, ...additionalQuestions];
         });
       }
+      
+      // Filter unique by text
+      const seenTexts = new Set<string>();
+      const uniqueChosen: QuizQuestion[] = [];
+      for (const q of chosenPool) {
+        if (q && q.question && !seenTexts.has(q.question)) {
+          seenTexts.add(q.question);
+          uniqueChosen.push(q);
+        }
+      }
+      chosenPool = uniqueChosen;
+      
+      if (chosenPool.length < quizQuestionCount) {
+        const otherLessonsQuestions = lessonsData
+          .filter(l => l.unitId !== quizSelectedUnitId)
+          .flatMap(l => {
+            const lOwn = l.quiz || [];
+            const lAdd = lessonQuizzes[l.id] || [];
+            return [...lOwn, ...lAdd];
+          });
+        
+        for (const q of otherLessonsQuestions) {
+          if (q && q.question && !seenTexts.has(q.question)) {
+            seenTexts.add(q.question);
+            paddingPool.push(q);
+          }
+        }
+      }
     } else if (quizScope === 'lesson') {
-      pool = lessonQuizzes[quizSelectedLessonId] || [];
+      const lesson = lessonsData.find(l => l.id === quizSelectedLessonId);
+      const lessonOwnQuestions = lesson?.quiz || [];
+      const additionalQuestions = lessonQuizzes[quizSelectedLessonId] || [];
+      chosenPool = [...lessonOwnQuestions, ...additionalQuestions];
+      
+      // Filter unique by text
+      const seenTexts = new Set<string>();
+      const uniqueChosen: QuizQuestion[] = [];
+      for (const q of chosenPool) {
+        if (q && q.question && !seenTexts.has(q.question)) {
+          seenTexts.add(q.question);
+          uniqueChosen.push(q);
+        }
+      }
+      chosenPool = uniqueChosen;
+      
+      if (chosenPool.length < quizQuestionCount) {
+        const otherLessonsQuestions = lessonsData
+          .filter(l => l.id !== quizSelectedLessonId)
+          .flatMap(l => {
+            const lOwn = l.quiz || [];
+            const lAdd = lessonQuizzes[l.id] || [];
+            return [...lOwn, ...lAdd];
+          });
+        
+        for (const q of otherLessonsQuestions) {
+          if (q && q.question && !seenTexts.has(q.question)) {
+            seenTexts.add(q.question);
+            paddingPool.push(q);
+          }
+        }
+      }
     }
     
-    // Shuffle the pool of unique questions
-    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    // Shuffle chosen pool and padding pool as separate buckets
+    const shuffledChosen = [...chosenPool].sort(() => Math.random() - 0.5);
+    const shuffledPadding = [...paddingPool].sort(() => Math.random() - 0.5);
     
-    // Slice to the configured size
-    return shuffled.slice(0, quizQuestionCount);
+    const combined = [...shuffledChosen, ...shuffledPadding];
+    return combined.slice(0, quizQuestionCount);
   };
 
   // Generate 10 questions for lesson quiz on activate
   useEffect(() => {
     if (activeQuiz) {
-      const lessonOwnQuestions = activeQuiz.quiz || [];
+      const curriculumQuestions = activeQuiz.quiz || [];
+      const detailedQuestions = lessonQuizzes[activeQuiz.id] || [];
+      const lessonOwnQuestions = [...curriculumQuestions, ...detailedQuestions];
+      
+      // Filter unique by question text
+      const seenTexts = new Set<string>();
+      const uniqueOwn: QuizQuestion[] = [];
+      for (const q of lessonOwnQuestions) {
+        if (q && q.question && !seenTexts.has(q.question)) {
+          seenTexts.add(q.question);
+          uniqueOwn.push(q);
+        }
+      }
+
       const otherLessonsQuestions = lessonsData
         .filter(l => l.id !== activeQuiz.id)
-        .flatMap(l => l.quiz || []);
+        .flatMap(l => {
+          const lOwn = l.quiz || [];
+          const lAdd = lessonQuizzes[l.id] || [];
+          return [...lOwn, ...lAdd];
+        });
       
       // Shuffle other questions to create a random set
       const shuffledOthers = [...otherLessonsQuestions].sort(() => 0.5 - Math.random());
       
       // Combine target lesson questions + additional questions as needed to make 10 questions
-      const neededCount = Math.max(0, 10 - lessonOwnQuestions.length);
-      const selectedOthers = shuffledOthers.slice(0, neededCount);
+      const neededCount = Math.max(0, 10 - uniqueOwn.length);
+      const selectedOthers: QuizQuestion[] = [];
       
-      setActiveQuizQuestions([...lessonOwnQuestions, ...selectedOthers]);
+      for (const q of shuffledOthers) {
+        if (selectedOthers.length >= neededCount) break;
+        if (q && q.question && !seenTexts.has(q.question)) {
+          seenTexts.add(q.question);
+          selectedOthers.push(q);
+        }
+      }
+      
+      setActiveQuizQuestions([...uniqueOwn, ...selectedOthers]);
     } else {
       setActiveQuizQuestions([]);
     }
@@ -680,11 +765,37 @@ export default function App() {
                     {(() => {
                       let poolLength = 10;
                       if (quizScope === 'comprehensive') {
-                        poolLength = Object.values(lessonQuizzes).flat().length + grandFinalExam.length;
+                        const lessonPool = Object.values(lessonQuizzes).flat();
+                        const curriculumPool = lessonsData.flatMap(l => l.quiz || []);
+                        const seenTexts = new Set<string>();
+                        let total = grandFinalExam.length;
+                        for (const q of [...lessonPool, ...curriculumPool]) {
+                          if (q && q.question && !seenTexts.has(q.question)) {
+                            seenTexts.add(q.question);
+                            total++;
+                          }
+                        }
+                        poolLength = total;
                       } else if (quizScope === 'unit') {
-                        poolLength = lessonsData.filter(l => l.unitId === quizSelectedUnitId).flatMap(l => lessonQuizzes[l.id] || []).length;
+                        const unitLessons = lessonsData.filter(l => l.unitId === quizSelectedUnitId);
+                        const seenTexts = new Set<string>();
+                        unitLessons.forEach(l => {
+                          const lOwn = l.quiz || [];
+                          const lAdd = lessonQuizzes[l.id] || [];
+                          [...lOwn, ...lAdd].forEach(q => {
+                            if (q && q.question) seenTexts.add(q.question);
+                          });
+                        });
+                        poolLength = seenTexts.size;
                       } else if (quizScope === 'lesson') {
-                        poolLength = (lessonQuizzes[quizSelectedLessonId] || []).length;
+                        const lesson = lessonsData.find(l => l.id === quizSelectedLessonId);
+                        const lOwn = lesson?.quiz || [];
+                        const lAdd = lessonQuizzes[quizSelectedLessonId] || [];
+                        const seenTexts = new Set<string>();
+                        [...lOwn, ...lAdd].forEach(q => {
+                          if (q && q.question) seenTexts.add(q.question);
+                        });
+                        poolLength = seenTexts.size;
                       }
                       return `${poolLength} سؤالاً منهجياً`;
                     })()}
