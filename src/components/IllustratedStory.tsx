@@ -24,6 +24,7 @@ import { Lesson, StorySlide, VocabularyWord } from '../types';
 import SoundEngine from '../lib/audio';
 import imageOverridesStatic from '../data/image_overrides.json';
 import { quranSurahsData, QuranSurah, QuranVerse } from '../data/quranData';
+import { fullTextbookData } from '../data/fullTextbook';
 
 // Helper function to extract Google Drive file ID and convert to direct image link
 const getGoogleDriveDirectImageUrl = (url: string | undefined): string | undefined => {
@@ -72,6 +73,143 @@ const ImageWithFallback = ({ src, alt, fallbackType, renderFallback }: ImageWith
   );
 };
 
+function TextbookView({ lessonId, lesson }: { lessonId: string; lesson: Lesson }) {
+  const data = fullTextbookData[lessonId] || {
+    unitTitle: `الوحدة الدراسية - المنهج الرسمي`,
+    lessonTitle: lesson.title,
+    intro: lesson.shortDesc,
+    coreText: lesson.slides.map(s => s.highlightVerse).filter(Boolean).join(" \n\n ") || "يرجى مراجعة صفحات الدرس بالشرائح التفاعلية للاطلاع على معاني المتن.",
+    detailedExplanation: lesson.slides.map(s => ({
+      title: s.title,
+      content: s.narrative
+    })),
+    benefitsAndMorals: [
+      "المحافظة على المذاكرة والتحصيل الأكاديمي باستمرار.",
+      "تطبيق التوجيهات والقيم الإسلامية الفاضلة الواردة بالدرس في تعاملاتنا اليومية.",
+      "احترام المعلم والزملاء والمساهمة في بناء بيئة صفية إيجابية ومسؤولة."
+    ],
+    textbookQuestions: lesson.quiz.map(q => ({
+      question: q.question,
+      answer: q.explanation || q.options[q.correctAnswer]
+    }))
+  };
+
+  // State to toggle seeing solutions
+  const [revealedSolutions, setRevealedSolutions] = useState<Record<number, boolean>>({});
+
+  return (
+    <div className="w-full flex flex-col md:flex-row gap-0 text-right relative" id="full-textbook-view">
+      {/* Book spine middle fold decorator (visible only on desktop) */}
+      <div className="absolute inset-y-0 left-1/2 w-10 -translate-x-1/2 page-fold pointer-events-none hidden md:block z-20"></div>
+
+      {/* LEFT PAGE of textbook spread (45% width): Morals, vocabulary and class questions */}
+      <div className="w-full md:w-[45%] flex flex-col justify-between p-2 md:pl-8 pb-6 md:pb-0 text-right md:border-l md:border-[#DCD3C1]/50 md:max-h-[600px] md:overflow-y-auto scrollbar-thin">
+        <div className="space-y-6">
+          {/* Morals & Lessons Learned */}
+          <div className="bg-[#5A6B47]/5 border-r-4 border-[#5A6B47] p-4.5 rounded-l-xl">
+            <h4 className="text-xs font-black text-[#5A6B47] mb-2.5 flex items-center gap-1.5 justify-start">
+              <Lightbulb className="w-4.5 h-4.5 text-[#5A6B47]" />
+              <span>الدروس والعِبر المستفادة من الدرس الكافي:</span>
+            </h4>
+            <ul className="space-y-2 text-[11px] text-[#4A453E] leading-relaxed font-semibold">
+              {data.benefitsAndMorals.map((benefit, i) => (
+                <li key={i} className="flex items-start gap-1 justify-start">
+                  <span className="text-[#5A6B47] mt-0.5 ml-1 shrink-0">•</span>
+                  <span>{benefit}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Official Evaluation & Exercise questions */}
+          <div>
+            <h4 className="text-xs font-black text-[#D48166] mb-3 flex items-center gap-1.5 justify-start">
+              <Trophy className="w-4.5 h-4.5 text-[#D48166]" />
+              <span>التقويم وحل تدريبات الكتاب المدرسي:</span>
+            </h4>
+            <div className="space-y-3">
+              {data.textbookQuestions.length > 0 ? (
+                data.textbookQuestions.map((eq, i) => (
+                  <div key={i} className="bg-white border border-[#DCD3C1]/80 p-3.5 rounded-xl text-right">
+                    <p className="text-[11px] font-black text-[#3A452E] mb-1.5 leading-relaxed">
+                      س{i + 1}: {eq.question}
+                    </p>
+                    {revealedSolutions[i] ? (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="text-[10px] text-[#5A6B47] bg-[#5A6B47]/5 border border-dashed border-[#5A6B47]/20 px-3 py-2 rounded-lg font-bold leading-relaxed mt-2"
+                      >
+                        <span className="text-xs ml-1">🎯</span>
+                        <span>الجواب المعتمد برسم المنهج: </span>
+                        <p className="mt-1 text-[#4A453E]">{eq.answer}</p>
+                      </motion.div>
+                    ) : (
+                      <button
+                        onClick={() => setRevealedSolutions(prev => ({ ...prev, [i]: true }))}
+                        className="bg-[#D48166]/10 text-[#D48166] border border-[#D48166]/30 hover:bg-[#D48166]/20 transition-all font-bold text-[9px] py-1 px-3 rounded-lg mt-1 cursor-pointer"
+                      >
+                        عرض نموذج الإجابة 👁️
+                      </button>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-[10px] text-[#8E8268] italic">لا توجد تمارين تقويمية محددة لهذا الدرس؛ يرجى خوض الاختبار التفاعلي العام.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* RIGHT PAGE of textbook spread (55% width): Core contents list, main text scroll */}
+      <div className="w-full md:w-[55%] flex flex-col justify-between p-2 md:pr-10 pt-6 md:pt-0 text-right border-t md:border-t-0 border-[#DCD3C1]/50 md:max-h-[600px] md:overflow-y-auto scrollbar-thin">
+        <div className="space-y-5" dir="rtl">
+          {/* Book header */}
+          <div className="border-b border-[#DCD3C1]/60 pb-3 flex justify-between items-center">
+            <div className="text-right">
+              <span className="text-[9px] font-black bg-[#4A648C]/15 text-[#4A648C] px-2 py-0.5 rounded-full border border-[#4A648C]/20">
+                {data.unitTitle}
+              </span>
+              <h3 className="text-sm font-black text-[#3A452E] mt-1">كتاب الطالب: {data.lessonTitle}</h3>
+            </div>
+            <span className="text-[10px] font-bold text-[#8E8268]">تصفح الكتاب 📖</span>
+          </div>
+
+          {/* Intro quote */}
+          <p className="text-xs text-[#8E8268] bg-[#FAF9F6] border border-[#DCD3C1]/60 p-3.5 rounded-xl leading-relaxed font-semibold italic text-justify">
+            {data.intro}
+          </p>
+
+          {/* Core textbook text (Hadith / verses / text panel) */}
+          <div className="bg-[#FAF9F6] border border-amber-900/10 p-5 rounded-2xl shadow-inner text-center relative overflow-hidden">
+            <div className="absolute top-0 right-0 left-0 h-1 bg-[#D48166]"></div>
+            <p className="text-sm md:text-base font-black font-serif text-[#3A452E] leading-loose whitespace-pre-line">
+              {data.coreText}
+            </p>
+          </div>
+
+          {/* Detailed explanation sections */}
+          <div className="space-y-4">
+            <h4 className="text-xs font-black text-[#5A6B47] pr-2 border-r-3 border-[#5A6B47] mb-2.5">الشرح والتوضيح الرسمي المفصل:</h4>
+            {data.detailedExplanation.map((sec, idx) => (
+              <div key={idx} className="bg-[#F7F3E9] border border-[#E9E1CD] p-4.5 rounded-2xl text-right">
+                <h5 className="text-[11px] font-extrabold text-[#3A452E] mb-2 flex items-center gap-1.5 justify-start">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#5A6B47]"></span>
+                  <span>{sec.title}</span>
+                </h5>
+                <p className="text-xs text-[#4A453E] leading-relaxed text-justify font-medium whitespace-pre-line">
+                  {sec.content}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface IllustratedStoryProps {
   lesson: Lesson;
   onBack: () => void;
@@ -113,7 +251,7 @@ export default function IllustratedStory({
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   // Quran Integration States
-  const [activeTab, setActiveTab] = useState<'lesson' | 'quran'>('lesson');
+  const [activeTab, setActiveTab] = useState<'lesson' | 'textbook' | 'quran'>('lesson');
   const [selectedQuranAyah, setSelectedQuranAyah] = useState<number | null>(1);
   const [isSurahPlaying, setIsSurahPlaying] = useState<boolean>(false);
   const [audioInstance, setAudioInstance] = useState<HTMLAudioElement | null>(null);
@@ -772,40 +910,55 @@ export default function IllustratedStory({
         </div>
       </div>
 
-      {/* Quran Tab Selector (only visible if the lesson has a matching Surah in quranSurahsData) */}
-      {matchedSurah && (
-        <div className="flex gap-2.5 mb-5 justify-start" id="quran-tab-switcher">
-          <button
-            onClick={() => {
-              setActiveTab('lesson');
-              SoundEngine.playSparkle();
-            }}
-            className={`py-3 px-6 rounded-2xl text-xs font-black transition-all duration-300 flex items-center gap-2 cursor-pointer shadow-sm ${
-              activeTab === 'lesson'
-                ? 'bg-[#5A6B47] text-white border-b-4 border-[#3D4B2D]'
-                : 'bg-white border-2 border-[#DCD3C1] text-[#8E8268] hover:border-[#8E8268]'
-            }`}
-          >
-            <BookOpenCheck className="w-4 h-4" />
-            <span>عرض الدرس التفاعلي والوسائط 📖</span>
-          </button>
-          
+      {/* Universal Tab Switcher: Slides, Full Textbook, Quran recitation */}
+      <div className="flex flex-wrap gap-2.5 mb-5 justify-start" id="quran-tab-switcher">
+        <button
+          onClick={() => {
+            setActiveTab('lesson');
+            SoundEngine.playSparkle();
+          }}
+          className={`py-3 px-5 rounded-2xl text-xs font-black transition-all duration-300 flex items-center gap-2 cursor-pointer shadow-sm ${
+            activeTab === 'lesson'
+              ? 'bg-[#5A6B47] text-white border-b-4 border-[#3D4B2D]'
+              : 'bg-white border-2 border-[#DCD3C1] text-[#8E8268] hover:border-[#8E8268]'
+          }`}
+        >
+          <BookOpenCheck className="w-4 h-4" />
+          <span>الدرس التفاعلي بالشرائح 🖼️</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveTab('textbook');
+            SoundEngine.playTrophy();
+          }}
+          className={`py-3 px-5 rounded-2xl text-xs font-black transition-all duration-300 flex items-center gap-2 cursor-pointer shadow-sm ${
+            activeTab === 'textbook'
+              ? 'bg-[#4A648C] text-white border-b-4 border-[#2F4468]'
+              : 'bg-white border-2 border-[#DCD3C1] text-[#8E8268] hover:border-[#8E8268]'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          <span>كتاب الطالب المدرسي الكامل 📖</span>
+        </button>
+        
+        {matchedSurah && (
           <button
             onClick={() => {
               setActiveTab('quran');
               SoundEngine.playTrophy();
             }}
-            className={`py-3 px-6 rounded-2xl text-xs font-black transition-all duration-300 flex items-center gap-2 cursor-pointer shadow-sm ${
+            className={`py-3 px-5 rounded-2xl text-xs font-black transition-all duration-300 flex items-center gap-2 cursor-pointer shadow-sm ${
               activeTab === 'quran'
                 ? 'bg-[#B08933] text-white border-b-4 border-[#866520] shadow-md animate-pulse'
                 : 'bg-white border-2 border-[#DCD3C1] text-[#8E8268] hover:border-[#8E8268]'
             }`}
           >
             <Sparkles className="w-4 h-4 text-yellow-300 fill-yellow-300" />
-            <span>تلاوة السورة الكريمة من المصحف الشريف 🕌</span>
+            <span>تلاوة السورة ومصحف التجويد 🕌</span>
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Physical Open-Book Spread container (Natural Tones Paper style) */}
       <div className="bg-[#FAF9F6] border border-[#DCD3C1] rounded-[2rem] p-5 md:p-8 flex flex-col md:flex-row gap-0 book-shadow relative overflow-hidden min-h-[480px]">
@@ -1007,6 +1160,8 @@ export default function IllustratedStory({
               </div>
             </div>
           </>
+        ) : activeTab === 'textbook' ? (
+          <TextbookView lessonId={lesson.id} lesson={lesson} />
         ) : (
           <>
             {/* Book spine middle fold decorator (visible only on desktop) */}
