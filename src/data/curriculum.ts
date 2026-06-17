@@ -238,7 +238,7 @@ export const lessonsData: Lesson[] = [
         title: "ألواح خشبية ودسر مسمارية",
         narrative: "تسرد السورة بقوة دراماتيكية رحلة نجاة نبي الله نوح فوق طوفان الماء الجارف بفضل بناء فلك بسيط من ألواح ومسامير (ذات ألواح ودسر) تبرهن أن الصانع المنجي الحقيقي هو الله رب العرش، وتدعو العقل للتفكر والحذر من التكبر.",
         highlightVerse: "وَلَقَدْ يَسَّرْنَا الْقُرْآنَ لِلذِّكْرِ فَهَلْ مِن مُّدَّكِرٍ",
-        imageUrl: "wooden_ship_storm_waves",
+        imageUrl: "imageUrl: "https://drive.google.com/file/d/14Kgk9KpoAeF0ZcEkFoJYDcdEEw_VkmmV/view?usp=sharing",",
         illustrationType: "stars"
       }
     ],
