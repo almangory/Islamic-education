@@ -86,14 +86,15 @@ export const lessonsData: Lesson[] = [
         title: "رحلة الوحي والنور الساطعة",
         narrative: "أهلاً بك يا بطل النور في سورة النجم! تبدأ هذه السورة الكريمة بقسم رباني عظيم بالنجم إذا مال وغاب، لتؤكد أعظم حقيقة: نبي الرحمة محمد صلى الله عليه وسلم ما ضلّ وما انحرف عن طريق الرشاد، وما ينطق بالهوى، بل كل كلامه وحي يوحى إليه صدقاً وعطفاً وإرشاداً.",
         highlightVerse: "وَمَا يَنطِقُ عَنِ ٱلْهَوَىٰٓ * إِنْ هُوَ إِلَّا وَحْيٌ يُوعَىٰ",
-imageUrl: "https://drive.google.com/file/d/1amP2mFzUyx7mgn7shY1lYJL1WquMbzxw/view?usp=sharing",
+        imageUrl: "space_stars_nebula",
+        illustrationType: "space"
       },
       {
         id: 2,
         title: "الملك ذو القوة العظمى: جبريل عليه السلام",
         narrative: "من الذي تولى تعليم نبينا القرآن؟ إنه الملك العظيم جبريل عليه السلام، أمين الوحي في السماء، الذي وصفه الله بـ 'شديد القوى' لقوته الخارقة الكريمة، و'ذو مِرّة' أي ذو خلقة تامة ومنظر حسن بهي ممتد بالأفق الساطع الأبهى، وقد رآه النبي بصورته الحقيقية وله ستمائة جناح تسد الأفق.",
         highlightVerse: "عَلَّمَهُۥ شَدِيدُ ٱلْقُوَىٰ * ذُو مِرَّةٍ فَٱسْتَوَىٰ",
-        imageUrl: "https://drive.google.com/file/d/14Kgk9KpoAeF0ZcEkFoJYDcdEEw_VkmmV/view?usp=sharing",
+        imageUrl: "shining_angel_star",
         illustrationType: "stars"
       },
       {
@@ -101,7 +102,7 @@ imageUrl: "https://drive.google.com/file/d/1amP2mFzUyx7mgn7shY1lYJL1WquMbzxw/vie
         title: "المسير لـ سدرة المنتهى",
         narrative: "في المعراج الإعجازي المهيب، ارتقى نبينا صلى الله عليه وسلم برفقة الملك جبريل حتى تجاوزا السماوات السبع ووصلا لأقصى نقطة ينتهي إليها علم الخلائق: 'سدرة المنتهى'. وهي شجرة نبق عظيمة البهاء يغشاها من نور الله ونور عرشه العظيم كل جمال رائع، وبجوارها جنة المأوى الموعودة للمتقين الصالحين.",
         highlightVerse: "عِندَ سِدْرَةِ ٱلْمُنتَهَىٰ * عِندَهَا جَنَّةُ ٱلْمَأْوَىٰ",
-        imageUrl: "https://drive.google.com/file/d/1Iy8Fh66cnHfEZe-0SsHwWdHbU1RKKosd/view?usp=sharing",
+        imageUrl: "lote_tree_glowing_heaven",
         illustrationType: "space"
       }
     ],
@@ -233,9 +234,9 @@ imageUrl: "https://drive.google.com/file/d/1amP2mFzUyx7mgn7shY1lYJL1WquMbzxw/vie
       {
         id: 2,
         title: "ألواح خشبية ودسر مسمارية",
-        narrative: "تسرد السورة بقوة دراماتيكية رحلة نجاة نبي الله نوح فوق طوفان الماء الجارف بفضل بناء فلك بسيط من ألواح ومسامير (ذات ألواح ودسر) تبرهن أن الصانع المنجي الحقيقي هو الله رب العرش، وتدعو العقل للتفكر والحذر من التكبر.",
-        highlightVerse: "وَلَقَدْ يَسَّرْنَا الْقُرْآنَ لِلذِّكْرِ فَهَلْ مِن مُّدَّكِرٍ",
-        imageUrl: "imageUrl: "https://drive.google.com/file/d/14Kgk9KpoAeF0ZcEkFoJYDcdEEw_VkmmV/view?usp=sharing",",
+        narrative: "(ذات ألواح ودسر) تبرهن أن المانع المنجي الحقيقي هو لله رب العرش، وتدعو العقل للتفكر والحذر من التكبر",
+        highlightVerse: "وَلَقَدْ يَسَّرْنَا الْقُرْءانَ لِلذِّكْرِ فَهَلْ مِن مُّدَّكِرٍ",
+        imageUrl: "https://drive.google.com/file/d/14Kgk9KpoAeF0ZcEkFoJYDcDeEw_VkmmV/view?usp=sharing",
         illustrationType: "stars"
       }
     ],
