@@ -73,7 +73,449 @@ const ImageWithFallback = ({ src, alt, fallbackType, renderFallback }: ImageWith
   );
 };
 
-function TextbookView({ lessonId, lesson }: { lessonId: string; lesson: Lesson }) {
+function InteractiveMemoText({ text, active, globalMode }: { text: string; active: boolean; globalMode: 'auto' | 'all' | 'none' }) {
+  if (!active) {
+    return <span className="whitespace-pre-line">{text}</span>;
+  }
+
+  const words = React.useMemo(() => text.split(/(\s+)/), [text]);
+  const [revealed, setRevealed] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    const initialRevealed: Record<number, boolean> = {};
+    let nonSpaceCount = 0;
+    
+    words.forEach((w, idx) => {
+      if (!w.trim()) {
+        initialRevealed[idx] = true;
+      } else {
+        nonSpaceCount++;
+        if (globalMode === 'all') {
+          initialRevealed[idx] = false; // mask all
+        } else if (globalMode === 'none') {
+          initialRevealed[idx] = true; // show all
+        } else {
+          // 'auto' mode: mask every 4th word
+          if (nonSpaceCount % 4 === 0) {
+            initialRevealed[idx] = false;
+          } else {
+            initialRevealed[idx] = true;
+          }
+        }
+      }
+    });
+    setRevealed(initialRevealed);
+  }, [words, globalMode]);
+
+  return (
+    <span className="leading-loose font-serif flex flex-wrap inline justify-start">
+      {words.map((word, idx) => {
+        if (!word.trim()) {
+          return <span key={idx} className="whitespace-pre-line">{word}</span>;
+        }
+        
+        const isRevealed = revealed[idx] !== false;
+        
+        return (
+          <motion.span
+            key={idx}
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent parent click
+              setRevealed(prev => ({ ...prev, [idx]: !prev[idx] }));
+              SoundEngine.playSparkle();
+            }}
+            className={`inline-block mx-0.5 px-0.5 rounded cursor-pointer transition-all duration-200 select-none ${
+              isRevealed 
+                ? 'bg-transparent text-[#4A453E] hover:bg-black/5 font-medium' 
+                : 'bg-[#5A6B47] text-transparent hover:bg-[#5A6B47]/95 relative rounded border border-[#5A6B47]/20 font-bold px-2'
+            }`}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            title={isRevealed ? "انقر لإخفاء الكلمة 👁️" : "انقر لإظهار الكلمة 👁️"}
+          >
+            {isRevealed ? (
+              word
+            ) : (
+              <span className="text-white text-[10px] font-bold select-none whitespace-nowrap">🔍 تذكرني</span>
+            )}
+          </motion.span>
+        );
+      })}
+    </span>
+  );
+}
+
+function StudyToolboxPanel({
+  lesson,
+  studyModeActive,
+  setStudyModeActive,
+  maskingMode,
+  setMaskingMode,
+  timerTime,
+  setTimerTime,
+  timerIsRunning,
+  setTimerIsRunning,
+}: {
+  lesson: Lesson;
+  studyModeActive: boolean;
+  setStudyModeActive: (val: boolean) => void;
+  maskingMode: 'auto' | 'all' | 'none';
+  setMaskingMode: (val: 'auto' | 'all' | 'none') => void;
+  timerTime: number;
+  setTimerTime: React.Dispatch<React.SetStateAction<number>>;
+  timerIsRunning: boolean;
+  setTimerIsRunning: (val: boolean) => void;
+}) {
+  const studyFlashcards = React.useMemo(() => {
+    const cards: { front: string; back: string; category: string }[] = [];
+    if (lesson.vocabulary && lesson.vocabulary.length > 0) {
+      lesson.vocabulary.forEach(v => {
+        cards.push({
+          front: `ما معنى المفردة القرآنية: "${v.word}"؟`,
+          back: v.meaning,
+          category: 'المفردات والتفاسير 📖'
+        });
+      });
+    }
+    if (lesson.quiz && lesson.quiz.length > 0) {
+      lesson.quiz.forEach(q => {
+        const correctOpt = q.options[q.correctAnswer];
+        cards.push({
+          front: `سؤال المذاكرة: ${q.question}`,
+          back: `الإجابة الصحيحة: ${correctOpt}\n\nالشرح والبيان: ${q.explanation || 'تم اعتماد نموذج الجواب من المنهج الرسمي.'}`,
+          category: 'فهم وتدبر قيم الدرس 🎯'
+        });
+      });
+    }
+    if (cards.length === 0) {
+      cards.push({
+        front: "كيف نثبّت فهم وحفظ آيات وقيم هذا الدرس المبارك؟",
+        back: "عبر تعاهد المتون ومراجعة الأسئلة وتكرار تصفح مصحف التجويد والإنصات المنتظم للآيات الكريمة.",
+        category: "توجيهات إرشادية 💡"
+      });
+    }
+    return cards;
+  }, [lesson]);
+
+  const [currentCardIdx, setCurrentCardIdx] = useState<number>(0);
+  const [isFlipped, setIsFlipped] = useState<boolean>(false);
+  const [sessionProgress, setSessionProgress] = useState<Record<number, 'known' | 'retry'>>({});
+
+  useEffect(() => {
+    setCurrentCardIdx(0);
+    setIsFlipped(false);
+    setSessionProgress({});
+  }, [lesson.id]);
+
+  const activeCard = studyFlashcards[currentCardIdx] || studyFlashcards[0];
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const handleNextCard = () => {
+    setIsFlipped(false);
+    setTimeout(() => {
+      setCurrentCardIdx(prev => (prev + 1) % studyFlashcards.length);
+      SoundEngine.playSparkle();
+    }, 150);
+  };
+
+  const handlePrevCard = () => {
+    setIsFlipped(false);
+    setTimeout(() => {
+      setCurrentCardIdx(prev => (prev - 1 + studyFlashcards.length) % studyFlashcards.length);
+      SoundEngine.playSparkle();
+    }, 150);
+  };
+
+  const markKnown = () => {
+    setSessionProgress(prev => ({ ...prev, [currentCardIdx]: 'known' }));
+    SoundEngine.playTrophy();
+    handleNextCard();
+  };
+
+  const markRetry = () => {
+    setSessionProgress(prev => ({ ...prev, [currentCardIdx]: 'retry' }));
+    SoundEngine.playSparkle();
+    handleNextCard();
+  };
+
+  const knownCount = Object.values(sessionProgress).filter(v => v === 'known').length;
+
+  return (
+    <div className="w-full bg-gradient-to-br from-[#FAF9F6] to-[#F1EBDC] border-2 border-[#DCD3C1] rounded-[2rem] p-5 md:p-6 mb-6 shadow-md relative overflow-hidden text-right" id="study-mode-toolbox">
+      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#5A6B47] via-[#D48166] to-[#4A648C]"></div>
+      
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#DCD3C1]/60 pb-4 mb-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="flex h-3.5 w-3.5 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#5A6B47] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-[#5A6B47]"></span>
+            </span>
+            <h3 className="text-sm font-black text-[#3A452E] flex items-center gap-2">
+              <span>غرفة المذاكرة والحفظ الفني الفعال 🧠</span>
+            </h3>
+          </div>
+          <p className="text-[10px] text-[#8E8268] mt-1 font-semibold">
+            أدوات علمية متكاملة لترسيخ الآيات، معاني الكلمات والمفاهيم الرسمية بالاسترجاع النشط الفوري.
+          </p>
+        </div>
+        
+        <button
+          onClick={() => {
+            setStudyModeActive(!studyModeActive);
+            setTimerIsRunning(false);
+            SoundEngine.playSparkle();
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+            studyModeActive 
+              ? 'bg-[#5A6B47] text-white shadow-md border-b-2 border-[#3D4B2D]'
+              : 'bg-[#DCD3C1]/50 text-[#4A453E] hover:bg-[#DCD3C1]'
+          }`}
+        >
+          {studyModeActive ? 'تعطيل وضع المذاكرة ⏹️' : 'تنشيط وضع المذاكرة ▶️'}
+        </button>
+      </div>
+
+      {studyModeActive ? (
+        <motion.div 
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="grid grid-cols-1 lg:grid-cols-12 gap-6"
+        >
+          <div className="lg:col-span-4 flex flex-col justify-between bg-white/75 border border-[#DCD3C1]/70 p-4.5 rounded-2xl relative">
+            <div>
+              <h4 className="text-xs font-black text-[#5A6B47] mb-3 flex items-center gap-1.5 pl-2 border-r-3 border-[#5A6B47]">
+                <span>أداة التسميع بالإخفاء والتلقين:</span>
+              </h4>
+              <p className="text-[10px] text-[#8E8268] leading-relaxed mb-4 font-semibold">
+                يقوم هذا الخيار بحجب كلمات من النصوص والآيات الكريمة لتختبر قوة حفظك وتستذكرها في عقلك، اضغط على الفراغ لرؤيتها!
+              </p>
+              
+              <div className="space-y-3.5">
+                <button
+                  onClick={() => {
+                    setMaskingMode('auto');
+                    SoundEngine.playSparkle();
+                  }}
+                  className={`w-full text-right p-3 rounded-xl border text-[11px] font-bold transition-all flex justify-between items-center cursor-pointer ${
+                    maskingMode === 'auto'
+                      ? 'bg-[#5A6B47]/10 text-[#5A6B47] border-[#5A6B47] border-2 shadow-sm'
+                      : 'bg-white border-[#DCD3C1]/80 text-[#4A453E] hover:border-[#5A6B47]/60'
+                  }`}
+                >
+                  <span>1. حجب ذكي تلقائي (موصى به)</span>
+                  <span className="text-[10px] bg-[#5A6B47]/10 text-[#5A6B47] px-2 py-0.5 rounded-md">حجب 25% 🔍</span>
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setMaskingMode('all');
+                    SoundEngine.playSparkle();
+                  }}
+                  className={`w-full text-right p-3 rounded-xl border text-[11px] font-bold transition-all flex justify-between items-center cursor-pointer ${
+                    maskingMode === 'all'
+                      ? 'bg-[#E27451]/10 text-[#D48166] border-[#D48166] border-2 shadow-sm'
+                      : 'bg-white border-[#DCD3C1]/80 text-[#4A453E] hover:border-[#D48166]/60'
+                  }`}
+                >
+                  <span>2. حجب المتن بأكمله بالتسميع</span>
+                  <span className="text-[10px] bg-[#E27451]/10 text-[#D48166] px-2 py-0.5 rounded-md">حجب 100% 🚫</span>
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setMaskingMode('none');
+                    SoundEngine.playSparkle();
+                  }}
+                  className={`w-full text-right p-3 rounded-xl border text-[11px] font-bold transition-all flex justify-between items-center cursor-pointer ${
+                    maskingMode === 'none'
+                      ? 'bg-[#4A648C]/10 text-[#4A648C] border-[#4A648C] border-2 shadow-sm'
+                      : 'bg-white border-[#DCD3C1]/80 text-[#4A453E] hover:border-[#4A648C]/60'
+                  }`}
+                >
+                  <span>3. إظهار النص كاملاً (القراءة العادية)</span>
+                  <span className="text-[10px] bg-[#4A648C]/10 text-[#4A648C] px-2 py-0.5 rounded-md">إظهار الكل 👁️</span>
+                </button>
+              </div>
+            </div>
+            
+            <div className="mt-4 bg-[#FAF9F6] border border-[#DCD3C1]/40 p-2.5 rounded-xl text-center">
+              <span className="text-[9px] font-extrabold text-[#5A6B47] block">💡 إرشاد الحفظ والتعلم الذاتي</span>
+              <p className="text-[8px] text-[#8E8268] mt-0.5 font-bold">
+                تصفح الآن "الدرس التفاعلي بالشرائح" أو "تلاوة السورة" لرؤية الإخفاء التفاعلي في المتون والآيات! ونقر على الكلمة للكشف الفوري.
+              </p>
+            </div>
+          </div>
+
+          <div className="lg:col-span-3 flex flex-col justify-between bg-white/75 border border-[#DCD3C1]/70 p-4.5 rounded-2xl text-center">
+            <div>
+              <h4 className="text-xs font-black text-[#D48166] mb-3 flex items-center gap-1.5 justify-center">
+                <span>ساعة المذاكرة والتركيز ⏱️</span>
+              </h4>
+              <p className="text-[9px] text-[#8E8268] mb-3 leading-relaxed font-bold">
+                اختر المدة المحددة لجلستك والزم التركيز دون تشتيت!
+              </p>
+              
+              <div className="relative w-28 h-28 mx-auto flex items-center justify-center my-1 rounded-full border-4 border-[#F1EBDC] bg-[#FAF9F6] shadow-inner">
+                <div className="text-xl font-black font-mono text-[#3A452E] tracking-wider animate-pulse">
+                  {formatTime(timerTime)}
+                </div>
+              </div>
+              
+              <div className="flex justify-center gap-1.5 mt-3">
+                {[5, 10, 15, 25].map((mins) => (
+                  <button
+                    key={mins}
+                    onClick={() => {
+                      setTimerTime(mins * 60);
+                      setTimerIsRunning(false);
+                      SoundEngine.playSparkle();
+                    }}
+                    className={`px-2.5 py-1 rounded-md text-[9px] font-black border transition-all cursor-pointer ${
+                      timerTime === mins * 60
+                        ? 'bg-[#3A452E] text-white border-[#3A452E]'
+                        : 'bg-white border-[#DCD3C1] text-[#3A452E] hover:bg-[#FAF9F6]'
+                    }`}
+                  >
+                    {mins} دق
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-2.5 mt-4">
+              <button
+                onClick={() => {
+                  setTimerIsRunning(!timerIsRunning);
+                  SoundEngine.playSparkle();
+                }}
+                className={`flex-1 py-1.5 rounded-xl text-[10px] font-black border cursor-pointer transition-all ${
+                  timerIsRunning
+                    ? 'bg-[#E27451] text-white border-[#D48166] hover:bg-[#E27451]/90'
+                    : 'bg-[#5A6B47] text-white border-[#5A6B47] hover:bg-[#5A6B47]/90 shadow-sm'
+                }`}
+              >
+                {timerIsRunning ? '⏸️ إيقاف مؤقت' : '▶️ ابدأ التركيز'}
+              </button>
+              <button
+                onClick={() => {
+                  setTimerIsRunning(false);
+                  setTimerTime(10 * 60);
+                  SoundEngine.playSparkle();
+                }}
+                className="px-3 py-1.5 bg-[#FAF9F6] border border-[#DCD3C1] hover:bg-[#F1EBDC] text-[#3A452E] rounded-xl text-[10px] font-black cursor-pointer"
+              >
+                🔄 إعادة
+              </button>
+            </div>
+          </div>
+
+          <div className="lg:col-span-5 flex flex-col justify-between bg-white/75 border border-[#DCD3C1]/70 p-4.5 rounded-2xl">
+            <div>
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-[8px] font-extrabold bg-[#4A648C]/15 text-[#4A648C] border border-[#4A648C]/20 px-2 py-0.5 rounded-md">
+                  {activeCard.category}
+                </span>
+                <span className="text-[9px] font-bold text-[#8E8268]">
+                  البطاقة {currentCardIdx + 1} من {studyFlashcards.length}
+                </span>
+              </div>
+              
+              <div 
+                onClick={() => {
+                  setIsFlipped(!isFlipped);
+                  SoundEngine.playSparkle();
+                }}
+                className="w-full h-[125px] perspective-md cursor-pointer relative"
+              >
+                <div className={`relative w-full h-full transition-transform duration-500 transform-style-3d ${
+                  isFlipped ? 'rotate-y-180' : ''
+                }`}>
+                  <div className={`absolute inset-0 backface-hidden bg-gradient-to-br from-[#FAF9F6] to-[#FAF9F6]/50 border-2 border-dashed border-[#5A6B47]/20 p-4 rounded-xl flex flex-col justify-center items-center text-center p-3 overflow-y-auto ${
+                    isFlipped ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                  }`}>
+                    <span className="text-[11px] font-black text-[#3A452E] whitespace-pre-line leading-relaxed drop-shadow-sm">
+                      {activeCard.front}
+                    </span>
+                    <span className="text-[8px] text-[#5A6B47] font-black mt-2 inline-block px-2 py-0.5 bg-[#5A6B47]/5 rounded-md animate-pulse">
+                      🔄 انقر على البطاقة لقلبها ومعرفة الجواب
+                    </span>
+                  </div>
+
+                  <div className={`absolute inset-0 backface-hidden bg-gradient-to-br from-[#5A6B47]/5 to-[#5A6B47]/10 border-2 border-[#5A6B47] p-4 rounded-xl flex flex-col justify-center items-center text-center p-3 overflow-y-auto rotate-y-180 ${
+                    isFlipped ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                  }`}>
+                    <span className="text-[10px] font-extrabold text-[#4A453E] whitespace-pre-line leading-relaxed">
+                      {activeCard.back}
+                    </span>
+                    <span className="text-[8px] text-[#8E8268] font-bold mt-2">
+                      💡 تم التحقق من المنهج المدرسي المعتمد
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 mt-4">
+              <div className="flex gap-1.5">
+                <button
+                  onClick={handlePrevCard}
+                  className="p-1.5 bg-white border border-[#DCD3C1] hover:bg-[#FAF9F6] rounded-lg cursor-pointer"
+                  title="البطاقة السابقة"
+                >
+                  <ChevronRight className="w-4 h-4 text-[#3A452E]" />
+                </button>
+                <button
+                  onClick={handleNextCard}
+                  className="p-1.5 bg-white border border-[#DCD3C1] hover:bg-[#FAF9F6] rounded-lg cursor-pointer"
+                  title="البطاقة التالية"
+                >
+                  <ChevronLeft className="w-4 h-4 text-[#3A452E]" />
+                </button>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={markRetry}
+                  className="px-2.5 py-1 bg-[#D48166]/10 text-[#D48166] border border-[#D48166]/20 hover:bg-[#D48166]/20 rounded-lg text-[9px] font-black cursor-pointer"
+                >
+                  🔄 تكرار لاحقاً
+                </button>
+                <button
+                  onClick={markKnown}
+                  className="px-2.5 py-1 bg-[#5A6B47]/10 text-[#5A6B47] border border-[#5A6B47]/20 hover:bg-[#5A6B47]/20 rounded-lg text-[9px] font-black cursor-pointer"
+                >
+                  ✅ أتقنته!
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-3 flex justify-between items-center text-[7.5px] font-bold text-[#8E8268]">
+              <span>إنتاجية جلسة اليوم: {knownCount} بطاقات متقنة</span>
+              <div className="w-24 bg-[#E9E1CD] h-1.5 rounded-full overflow-hidden">
+                <div 
+                  className="bg-[#5A6B47] h-full rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, (knownCount / studyFlashcards.length) * 100)}%` }}
+                ></div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      ) : (
+        <div className="text-center py-4 text-xs font-bold text-[#8E8268]">
+          <span>وضع المذاكرة والحفظ الفعال غير نشط للّحظة. انقر على الزر لتفعيله وبدء التسميع التفاعلي! ✨</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TextbookView({ lessonId, lesson, studyModeActive, maskingMode }: { lessonId: string; lesson: Lesson; studyModeActive: boolean; maskingMode: 'auto' | 'all' | 'none' }) {
   const data = fullTextbookData[lessonId] || {
     unitTitle: `الوحدة الدراسية - المنهج الرسمي`,
     lessonTitle: lesson.title,
@@ -184,8 +626,8 @@ function TextbookView({ lessonId, lesson }: { lessonId: string; lesson: Lesson }
           {/* Core textbook text (Hadith / verses / text panel) */}
           <div className="bg-[#FAF9F6] border border-amber-900/10 p-5 rounded-2xl shadow-inner text-center relative overflow-hidden">
             <div className="absolute top-0 right-0 left-0 h-1 bg-[#D48166]"></div>
-            <p className="text-sm md:text-base font-black font-serif text-[#3A452E] leading-loose whitespace-pre-line">
-              {data.coreText}
+            <p className="text-sm md:text-base font-black font-serif text-[#3A452E] leading-loose whitespace-pre-line text-justify">
+              <InteractiveMemoText text={data.coreText} active={studyModeActive} globalMode={maskingMode} />
             </p>
           </div>
 
@@ -198,9 +640,9 @@ function TextbookView({ lessonId, lesson }: { lessonId: string; lesson: Lesson }
                   <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#5A6B47]"></span>
                   <span>{sec.title}</span>
                 </h5>
-                <p className="text-xs text-[#4A453E] leading-relaxed text-justify font-medium whitespace-pre-line">
-                  {sec.content}
-                </p>
+                <div className="text-xs text-[#4A453E] leading-relaxed text-justify font-medium whitespace-pre-line">
+                  <InteractiveMemoText text={sec.content} active={studyModeActive} globalMode={maskingMode} />
+                </div>
               </div>
             ))}
           </div>
@@ -231,6 +673,36 @@ export default function IllustratedStory({
   const [pointsReward, setPointsReward] = useState<number>(0);
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
 
+  // Study Mode State variables
+  const [studyModeActive, setStudyModeActive] = useState<boolean>(false);
+  const [maskingMode, setMaskingMode] = useState<'auto' | 'all' | 'none'>('auto');
+  const [timerTime, setTimerTime] = useState<number>(600); // 10 minutes default (600s)
+  const [timerIsRunning, setTimerIsRunning] = useState<boolean>(false);
+
+  // Study Mode Timer Tick Hook
+  useEffect(() => {
+    let interval: any = null;
+    if (timerIsRunning && timerTime > 0) {
+      interval = setInterval(() => {
+        setTimerTime(prev => {
+          if (prev <= 1) {
+            setTimerIsRunning(false);
+            try {
+              SoundEngine.playTrophy(); // Ring complete chime!
+            } catch (err) {
+              console.log(err);
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [timerIsRunning, timerTime]);
+
   const [customImages, setCustomImages] = useState<Record<string, string>>(() => {
     try {
       const stored = localStorage.getItem('gdrive_image_overrides');
@@ -244,6 +716,8 @@ export default function IllustratedStory({
   const [isPasscodeVerified, setIsPasscodeVerified] = useState<boolean>(false);
   const [tempImageUrl, setTempImageUrl] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
+  const [showExportAllJson, setShowExportAllJson] = useState<boolean>(false);
+  const [copiedExportAll, setCopiedExportAll] = useState<boolean>(false);
   
   // Full-stack dynamic override states
   const [passcode, setPasscode] = useState<string>('');
@@ -960,6 +1434,19 @@ export default function IllustratedStory({
         )}
       </div>
 
+      {/* Interactive Study and Memorization Room Panel */}
+      <StudyToolboxPanel 
+        lesson={lesson}
+        studyModeActive={studyModeActive}
+        setStudyModeActive={setStudyModeActive}
+        maskingMode={maskingMode}
+        setMaskingMode={setMaskingMode}
+        timerTime={timerTime}
+        setTimerTime={setTimerTime}
+        timerIsRunning={timerIsRunning}
+        setTimerIsRunning={setTimerIsRunning}
+      />
+
       {/* Physical Open-Book Spread container (Natural Tones Paper style) */}
       <div className="bg-[#FAF9F6] border border-[#DCD3C1] rounded-[2rem] p-5 md:p-8 flex flex-col md:flex-row gap-0 book-shadow relative overflow-hidden min-h-[480px]">
         {activeTab === 'quran' && matchedSurah ? (
@@ -1136,7 +1623,7 @@ export default function IllustratedStory({
                               : ''
                           }`}
                         >
-                          {verse.text} 
+                          <InteractiveMemoText text={verse.text} active={studyModeActive} globalMode={maskingMode} /> 
                           <span className={`inline-flex items-center justify-center w-6 h-6 mr-1.5 text-[9px] border rounded-full font-bold transition-all ${
                             playingVerseNumber === verse.number
                               ? 'bg-emerald-500 text-white border-emerald-500 animate-pulse'
@@ -1161,7 +1648,7 @@ export default function IllustratedStory({
             </div>
           </>
         ) : activeTab === 'textbook' ? (
-          <TextbookView lessonId={lesson.id} lesson={lesson} />
+          <TextbookView lessonId={lesson.id} lesson={lesson} studyModeActive={studyModeActive} maskingMode={maskingMode} />
         ) : (
           <>
             {/* Book spine middle fold decorator (visible only on desktop) */}
@@ -1242,9 +1729,9 @@ export default function IllustratedStory({
             </h2>
 
             {/* Narrative text with Amiri/Cairo serif font hybrid */}
-            <p className="text-sm md:text-base text-[#4A453E] leading-relaxed mb-6 whitespace-pre-line text-justify font-serif pr-1">
-              {currentSlide.narrative}
-            </p>
+            <div className="text-sm md:text-base text-[#4A453E] leading-relaxed mb-6 whitespace-pre-line text-justify font-serif pr-1">
+              <InteractiveMemoText text={currentSlide.narrative} active={studyModeActive} globalMode={maskingMode} />
+            </div>
 
             {/* Highlighted Verse block */}
             {currentSlide.highlightVerse && (
@@ -1255,7 +1742,7 @@ export default function IllustratedStory({
               >
                 <span className="block text-xs font-bold text-[#5A6B47] mb-1">تأمل الآية أو الحديث:</span>
                 <p className="font-serif text-base text-[#3A452E] leading-relaxed font-bold">
-                  « {currentSlide.highlightVerse} »
+                  « <InteractiveMemoText text={currentSlide.highlightVerse} active={studyModeActive} globalMode={maskingMode} /> »
                 </p>
               </motion.div>
             )}
@@ -1517,7 +2004,7 @@ export default function IllustratedStory({
                   </div>
 
                   {/* Export code block */}
-                  <div className="mb-5 text-right">
+                  <div className="mb-4 text-right">
                     <span className="block text-xs font-bold text-[#3A452E] mb-2">📋 كود التضمين للمطور (وضعه في سورس الموقع):</span>
                     <div className="p-3.5 bg-[#F1EBDC]/60 hover:bg-[#F1EBDC]/95 rounded-xl border border-[#DCD3C1] text-left font-mono text-[11px] overflow-x-auto relative transition duration-200">
                       <button
@@ -1548,6 +2035,65 @@ export default function IllustratedStory({
                         imageUrl: "{tempImageUrl || 'https://drive.google.com/...'}",
                       </code>
                     </div>
+                  </div>
+
+                  {/* EXPORT ALL JSON BLOCK FOR GITHUB/VERCEL PERMANENT PERSISTENCE */}
+                  <div className="mb-5 text-right border-t border-[#DCD3C1]/50 pt-3">
+                    <button
+                      onClick={() => {
+                        setShowExportAllJson(!showExportAllJson);
+                        SoundEngine.playSparkle();
+                      }}
+                      className="text-[11px] font-black text-[#5A6B47] hover:underline flex items-center justify-between w-full cursor-pointer"
+                    >
+                      <span>📋 نقل وحفظ جميع تعديلات الصور إلى GitHub و Vercel بشكل دائم ومستقر؟</span>
+                      <span>{showExportAllJson ? "إغلاق 🔼" : "عرض التفاصيل والطريقة 🔽"}</span>
+                    </button>
+                    {showExportAllJson && (
+                      <div className="mt-2.5 p-3.5 bg-[#FAF9F6] border border-[#5A6B47]/20 rounded-xl text-right">
+                        <p className="text-[10px] text-[#4A453E] leading-relaxed mb-3 font-semibold">
+                          بسبب نظام المزامنة والحدود الأمنية لـ GitHub و Vercel، فإن التعديلات التي تقوم بحفظها هنا تحفظ تلقائياً في السيرفر المحلي لمشروعك وذاكرة متصفحك. لنقلها لنسختك المباشرة على Vercel، اتبع إحدى الطريقتين البسيطتين:
+                        </p>
+                        
+                        <div className="space-y-3 font-medium text-[10px] text-[#8E8268]">
+                          <div>
+                            <span className="font-extrabold text-[#3A452E]">الطريقة الأولى (موصى بها):</span> قم بالدخول إلى لوحة المطورين في AI Studio الخاص بك، ستلاحظ أن ملف <code className="text-[#3A452E] bg-[#E9E1CD] px-1 py-0.5 rounded text-[9px] font-mono">src/data/image_overrides.json</code> قد تم تعديله تلقائياً في خلفية السيرفر بالكود الجديد. كل ما عليك فعله هو تصدير المشروع إلى GitHub أو تنزيله كملف ZIP ثم رفعه، وستنعكس التعديلات تلقائياً بالكامل في النسخة المحمولة والمرفوعة.
+                          </div>
+                          
+                          <div className="border-t border-[#DCD3C1]/50 pt-2.5">
+                            <span className="font-extrabold text-[#3A452E]">الطريقة الثانية (يدوية فورية):</span> انسخ محتوى الكود الكامل التالي لملف الإعدادات المحدث، ثم افتح ملف <code className="text-[#3A452E] bg-[#E9E1CD] px-1 font-mono rounded text-[9px]">src/data/image_overrides.json</code> في مشروعك على GitHub أو VS Code، واستبدله بمحتويات هذا الكود المحفوظ:
+                          </div>
+                        </div>
+
+                        <div className="mt-3.5 p-3.5 bg-slate-900 text-slate-100 rounded-xl text-left font-mono text-[10px] overflow-x-auto relative max-h-[160px] overflow-y-auto" dir="ltr">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(JSON.stringify(customImages, null, 2));
+                              setCopiedExportAll(true);
+                              SoundEngine.playTrophy();
+                              setTimeout(() => setCopiedExportAll(false), 2000);
+                            }}
+                            className="absolute top-2 right-2 p-1.5 bg-slate-800 text-slate-100 hover:bg-slate-700 transition border border-slate-700 rounded-md cursor-pointer flex items-center justify-center gap-1 select-none"
+                            title="نسخ محتويات الملف بالكامل"
+                          >
+                            {copiedExportAll ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                <span className="text-[9px] text-emerald-400 font-sans font-bold">تم نسخ الكود!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5 text-slate-300" />
+                                <span className="text-[9px] text-slate-300 font-sans font-bold">نسخ الكود بالكامل 📋</span>
+                              </>
+                            )}
+                          </button>
+                          <pre className="text-[10px] font-mono leading-relaxed text-emerald-400">
+                            {JSON.stringify(customImages, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Action Buttons */}

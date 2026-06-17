@@ -18,6 +18,22 @@
   --color-natural-gold: #8E8268;
 }
 
+@utility perspective-md {
+  perspective: 1000px;
+}
+
+@utility transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+@utility rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+@utility backface-hidden {
+  backface-visibility: hidden;
+}
+
 @utility book-shadow {
   box-shadow: 20px 0 50px -10px rgba(0,0,0,0.1), -20px 0 50px -10px rgba(0,0,0,0.1);
 }
